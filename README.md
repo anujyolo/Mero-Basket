@@ -4,9 +4,9 @@ Hackathon project workspace.
 
 This is the first hackathon project of:
 
-- Dikchant Shreshtar
+- Dikshant Shrestha
 - Anuj Adhikari
-- Swami Karki
+- Sammep Karki
 
 ## Development
 
