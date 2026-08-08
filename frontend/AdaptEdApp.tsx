@@ -1366,8 +1366,16 @@ function CommunicatePage() {
 }
 
 function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUser: StudentAccount; setView: (view: View) => void; setLessonInput: (value: string) => void }) {
-  const [topic, setTopic] = useState("Accounting basics");
-  const [roomMode, setRoomMode] = useState<"Study" | "Competition">("Competition");
+  // A friend arriving on an invite link lands straight in that room.
+  const joinedRoom = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const room = params.get("room");
+    if (!room) return null;
+    return { room, topic: params.get("topic") || "", mode: params.get("mode") === "Study" ? "Study" as const : "Competition" as const };
+  }, []);
+  const [topic, setTopic] = useState(joinedRoom?.topic || "Accounting basics");
+  const [roomMode, setRoomMode] = useState<"Study" | "Competition">(joinedRoom?.mode || "Competition");
   const [friendEmail, setFriendEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
   const [friends, setFriends] = useState<string[]>(() => readStoredJson("padhai-yatra-study-friends-v1", []));
@@ -1376,7 +1384,9 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
     { from: "Padhai Yatra", text: "Create a topic, invite friends, then start a group quiz together.", time: new Date().toISOString() },
   ]));
   const roomCode = useMemo(() => `PY-${(topic || "ROOM").replace(/[^a-z0-9]/gi, "").slice(0, 4).toUpperCase() || "ROOM"}-${friends.length + 1}`, [friends.length, topic]);
-  const inviteLink = `https://github.com/anujyolo/Mero-Basket?room=${encodeURIComponent(roomCode)}&topic=${encodeURIComponent(topic || "study-room")}`;
+  // Point at the running app, not the source repo — a friend opening this needs the room.
+  const appOrigin = typeof window === "undefined" ? "http://localhost:3002" : window.location.origin;
+  const inviteLink = `${appOrigin}/?room=${encodeURIComponent(roomCode)}&topic=${encodeURIComponent(topic || "study-room")}&mode=${encodeURIComponent(roomMode)}`;
   useEffect(() => { localStorage.setItem("padhai-yatra-study-friends-v1", JSON.stringify(friends)); }, [friends]);
   useEffect(() => { localStorage.setItem("padhai-yatra-study-messages-v1", JSON.stringify(messages)); }, [messages]);
   const invite = async () => {
@@ -1387,8 +1397,24 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
     }
     setFriends((current) => current.includes(clean) ? current : [clean, ...current].slice(0, 12));
     setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to ${roomMode.toLowerCase()} room "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
-    setInviteStatus(`Sending invite to ${clean}…`);
-    if (supabase) {
+    setFriendEmail("");
+
+    // The friend is in the room the moment they have the link, so put it on the
+    // clipboard first. Email delivery is a bonus, never the thing that blocks an invite.
+    let copied = false;
+    try {
+      await navigator.clipboard?.writeText(inviteLink);
+      copied = true;
+    } catch {
+      /* clipboard can need a user gesture; the link is shown on screen regardless */
+    }
+    setInviteStatus(copied
+      ? `Invite link for ${clean} copied — paste it to them on WhatsApp, Messenger, or email.`
+      : `Invite ready for ${clean}. Use “Copy invite link” below and send it to them.`);
+
+    // Best-effort extras: record the room server-side and try the mailer.
+    if (!supabase) return;
+    try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
       if (userId) {
@@ -1401,23 +1427,18 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
           await supabase.from("study_invites").insert({ room_id: room.id, inviter_id: userId, invitee_email: clean });
         }
       }
-    }
-    let data: { ok?: boolean; message?: string; error?: string };
-    if (supabase) {
       const { data: functionData, error: functionError } = await supabase.functions.invoke("send-study-invite", {
         body: { email: clean, topic, roomCode, roomMode, inviteLink, inviterName: currentUser.name },
       });
-      data = functionError ? { ok: false, error: functionError.message } : functionData as { ok?: boolean; message?: string; error?: string };
-    } else {
-      const response = await fetch("/api/study-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: clean, topic, roomCode, roomMode, inviteLink, inviterName: currentUser.name }),
-      });
-      data = await response.json().catch(() => ({ ok: false, error: "Invite failed." })) as { ok?: boolean; message?: string; error?: string };
+      const result = functionData as { ok?: boolean; message?: string } | null;
+      if (!functionError && result?.ok) {
+        setInviteStatus(`Invite emailed to ${clean} — the link is also on your clipboard.`);
+      }
+      // A mailer failure is expected until SUPABASE_SECRET_KEY is filled in. The link
+      // above already works, so don't replace it with an edge-function error.
+    } catch {
+      /* the shareable link is the invite; server-side extras are optional */
     }
-    setInviteStatus(data.ok ? data.message || `Invite sent to ${clean}.` : data.error || "Invite could not be sent yet.");
-    setFriendEmail("");
   };
   const send = () => {
     if (!message.trim()) return;
@@ -1443,7 +1464,7 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
           <div className="room-mode" role="group" aria-label="Room mode">{(["Competition", "Study"] as const).map((mode) => <button type="button" className={roomMode === mode ? "active" : ""} onClick={() => setRoomMode(mode)} key={mode}>{mode}</button>)}</div>
           <label>Invite friend by email<div className="inline-form"><input value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} type="email" placeholder="friend@email.com" /><button className="button primary" type="button" onClick={invite}>Send invite</button></div></label>
           {inviteStatus && <p className="invite-status">{inviteStatus}</p>}
-          <div className="invite-link-box"><span>Room code: {roomCode}</span><code>{inviteLink}</code><button className="button" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Copy invite link</button></div>
+          <div className="invite-link-box"><span>Room code: {joinedRoom?.room || roomCode}</span><code>{inviteLink}</code><button className="button" onClick={async () => { await navigator.clipboard?.writeText(inviteLink); setInviteStatus("Invite link copied. Send it to your friend."); }}>Copy invite link</button></div>
           <div className="room-actions"><button className="button primary large" onClick={startQuiz}>Start same quiz for everyone →</button><button className="button large" onClick={() => setView("focus")}>Start group focus</button></div>
         </article>
         <article className="study-room-card">
