@@ -328,22 +328,22 @@ function buildLocalAnalysis(content: string) {
     ],
     quiz: [
       {
-        question: `What is the main idea of ${topic}?`,
-        options: ["The main idea in the lesson", "Only the longest word", "The page number"],
+        question: `Which statement best explains ${topic}?`,
+        options: [truncateText(shortMain, 120), `${topic} has no important meaning in this lesson`, `${topic} is only a title with no details`],
         answer: 0,
-        explanation: "Start with the core idea before memorizing details.",
+        explanation: `The correct answer explains the actual idea of ${topic}.`,
       },
       {
-        question: "Which detail should you review next?",
-        options: [keyPoints[0] || "Key point", "An unrelated fact", "Only the title"],
+        question: `Which detail is connected to ${topic}?`,
+        options: [keyPoints[0] || `A key feature of ${topic}`, `A detail unrelated to ${topic}`, `A heading without meaning`],
         answer: 0,
-        explanation: "Important key points help rebuild understanding quickly.",
+        explanation: `This detail belongs to the topic ${topic}.`,
       },
       {
-        question: "What is a useful study step?",
-        options: ["Explain it in your own words", "Skip to a new topic", "Memorize without checking"],
+        question: `Which example would best support ${topic}?`,
+        options: [truncateText(detail, 120), `An example from an unrelated subject`, `An example that does not mention ${topic}`],
         answer: 0,
-        explanation: "Saying it in your own words shows whether you truly understand it.",
+        explanation: `The best example should directly connect to ${topic}.`,
       },
     ],
   } satisfies LessonAnalysis;

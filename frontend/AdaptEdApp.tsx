@@ -96,7 +96,7 @@ type RoutineItem = {
   time: string;
 };
 
-const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v3";
+const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v4";
 const STUDY_SESSIONS_KEY = "adapted-study-sessions-v1";
 const ROUTINE_KEY = "adapted-routine-v1";
 
@@ -311,26 +311,27 @@ function makeQuiz(lessonInput: string, result?: LessonResult | null) {
     return { title: "Photosynthesis quick quiz", review: "Role of chlorophyll", questions: demoQuiz };
   }
   const topic = getLessonTopic(lessonInput, result);
-  const needs = result?.needs?.length ? result.needs : ["main idea", "important details", "example"];
-  const steps = result?.steps?.length ? result.steps : ["Read the lesson once.", "Find the key words.", "Explain the idea simply."];
+  const needs = result?.needs?.length ? result.needs : ["definition", "main parts", "real example"];
+  const summary = cleanText(result?.summary || lessonInput, `${topic} is the lesson topic.`);
+  const example = cleanText(result?.example || `An example can show how ${topic} works.`);
   const questions: QuizQuestion[] = [
     {
       question: `Which statement best explains ${topic}?`,
-      options: [result?.summary ? cleanText(result.summary).slice(0, 120) : `${topic} is the topic being studied.`, "Only the longest word in the topic", "Only the page number"],
+      options: [summary.slice(0, 140), `${topic} means there is no relationship between its important parts.`, `${topic} is only a word, not a concept.`],
       answer: 0,
-      explanation: `Start by understanding what ${topic} means before memorizing details.`,
+      explanation: `This answer explains the actual meaning of ${topic}.`,
     },
     {
-      question: `Which detail is connected to ${topic}?`,
-      options: [needs[0] || "Main idea", "An unrelated fact", "Only the title"],
+      question: `Which detail belongs with ${topic}?`,
+      options: [needs[0] || `A key feature of ${topic}`, `A detail that has no connection to ${topic}`, `A title with no explanation of ${topic}`],
       answer: 0,
-      explanation: "Important key words and facts help you rebuild the topic in your own words.",
+      explanation: `The correct option is connected to the concept of ${topic}.`,
     },
     {
-      question: "What is a helpful next step?",
-      options: [steps[0] || "Read the lesson once.", "Skip the topic", "Memorize without checking"],
+      question: `Which example best helps explain ${topic}?`,
+      options: [example.slice(0, 140), `An example about a completely different subject`, `An example that ignores ${topic}`],
       answer: 0,
-      explanation: "A small first step keeps the work manageable and easier to finish.",
+      explanation: `A useful example must directly show how ${topic} works.`,
     },
   ];
   return { title: `${topic} quick quiz`, review: needs[0] || "main idea", questions };

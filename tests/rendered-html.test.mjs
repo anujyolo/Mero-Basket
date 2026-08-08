@@ -101,6 +101,28 @@ test("creates topic-specific demand curve quiz questions", async () => {
   assert.doesNotMatch(JSON.stringify(data.analysis.quiz), /Only the longest word|The page number|main idea in the lesson/i);
 });
 
+test("fallback quiz stays on the requested topic", async () => {
+  workerUrl.searchParams.set("topic-quiz-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/adapt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "Simplify",
+        content: "Migration means the movement of people from one place to another for work, education, safety, or better living conditions.",
+      }),
+    }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  const quiz = JSON.stringify(data.analysis.quiz);
+  assert.match(quiz, /Migration|movement|people|place/i);
+  assert.doesNotMatch(quiz, /Only the longest word|The page number|Skip to a new topic|Memorize without checking|What is a useful study step/i);
+});
+
 test("uses the real topic when adapting a full paragraph", async () => {
   workerUrl.searchParams.set("paragraph-topic-test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
