@@ -134,6 +134,10 @@ function isAccountingTopic(content: string) {
   return /\b(accounting|accounts|accountancy|ledger|journal|debit|credit|balance sheet|trial balance|transaction)\b/i.test(content);
 }
 
+function isDemandCurveTopic(content: string) {
+  return /\b(demand curve|demand schedule|law of demand|quantity demanded|price demand|downward sloping)\b/i.test(content);
+}
+
 function getAccountingAnalysis() {
   return {
     mainTopic: "Accounting",
@@ -169,6 +173,46 @@ function getAccountingAnalysis() {
         options: ["Assets = Liabilities + Capital", "Assets = Expenses only", "Capital = Sales only"],
         answer: 0,
         explanation: "Assets, liabilities, and capital form the base of accounting records.",
+      },
+    ],
+  } satisfies LessonAnalysis;
+}
+
+function getDemandCurveAnalysis() {
+  return {
+    mainTopic: "Demand curve",
+    summary: "A demand curve shows the relationship between the price of a good and the quantity consumers are willing and able to buy. In most cases it slopes downward because people usually buy more when price is lower and less when price is higher.",
+    simpleExplanation: "A demand curve is a graph that shows how quantity demanded changes when price changes.",
+    keyPoints: ["Price", "Quantity demanded", "Law of demand", "Downward slope", "Consumer buying behavior", "Ceteris paribus"],
+    examples: [
+      "If the price of a notebook falls, students may buy more notebooks.",
+      "If the price of a snack rises, some buyers may buy fewer snacks.",
+    ],
+    learningSteps: [
+      "Put price on the vertical axis.",
+      "Put quantity demanded on the horizontal axis.",
+      "Mark the quantity demanded at each price.",
+      "Join the points to see the demand curve.",
+      "Explain why the curve usually slopes downward.",
+    ],
+    quiz: [
+      {
+        question: "What does a demand curve show?",
+        options: ["The relationship between price and quantity demanded", "Only business profit", "The total number of sellers"],
+        answer: 0,
+        explanation: "A demand curve shows how much consumers are willing to buy at different prices.",
+      },
+      {
+        question: "What usually happens when price rises, assuming other factors stay the same?",
+        options: ["Quantity demanded decreases", "Quantity demanded always increases", "Demand disappears completely"],
+        answer: 0,
+        explanation: "The law of demand says price and quantity demanded usually move in opposite directions.",
+      },
+      {
+        question: "Why does a normal demand curve slope downward?",
+        options: ["Lower prices usually encourage more buying", "Higher prices always create more demand", "It shows production cost only"],
+        answer: 0,
+        explanation: "A downward slope means consumers generally buy more at lower prices and less at higher prices.",
       },
     ],
   } satisfies LessonAnalysis;
@@ -212,6 +256,7 @@ function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
 }
 
 function buildLocalAnalysis(content: string) {
+  if (isDemandCurveTopic(content)) return getDemandCurveAnalysis();
   if (isAccountingTopic(content)) return getAccountingAnalysis();
 
   const sentences = splitSentences(content);
@@ -431,8 +476,8 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY;
     const textbookContext = await getSafeBookSearchContext(content);
 
-    if (textbookContext.mode === "GENERAL" && isAccountingTopic(content)) {
-      const analysis = getAccountingAnalysis();
+    if (textbookContext.mode === "GENERAL" && (isDemandCurveTopic(content) || isAccountingTopic(content))) {
+      const analysis = isDemandCurveTopic(content) ? getDemandCurveAnalysis() : getAccountingAnalysis();
       return NextResponse.json({
         mode: "DEMO_AI",
         preferencesApplied: body.preferences,

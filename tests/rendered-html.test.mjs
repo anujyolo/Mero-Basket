@@ -82,6 +82,25 @@ test("explains topic-only lessons with a useful starter explanation", async () =
   assert.ok(data.result.summary.length > "Zoology".length);
 });
 
+test("creates topic-specific demand curve quiz questions", async () => {
+  workerUrl.searchParams.set("demand-curve-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/adapt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "Simplify", content: "A demand curve" }),
+    }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.match(data.analysis.mainTopic, /Demand curve/i);
+  assert.match(JSON.stringify(data.analysis.quiz), /price|quantity demanded|law of demand/i);
+  assert.doesNotMatch(JSON.stringify(data.analysis.quiz), /Only the longest word|The page number|main idea in the lesson/i);
+});
+
 test("uses the real topic when adapting a full paragraph", async () => {
   workerUrl.searchParams.set("paragraph-topic-test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);

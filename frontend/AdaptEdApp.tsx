@@ -96,7 +96,7 @@ type RoutineItem = {
   time: string;
 };
 
-const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v2";
+const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v3";
 const STUDY_SESSIONS_KEY = "adapted-study-sessions-v1";
 const ROUTINE_KEY = "adapted-routine-v1";
 
@@ -228,6 +228,10 @@ function isAccountingTopic(value: string) {
   return /\b(accounting|accounts|accountancy|ledger|journal|debit|credit|balance sheet|trial balance|transaction)\b/i.test(value);
 }
 
+function isDemandCurveTopic(value: string) {
+  return /\b(demand curve|demand schedule|law of demand|quantity demanded|price demand|downward sloping)\b/i.test(value);
+}
+
 function accountingQuiz(topic = "Accounting") {
   return {
     title: `${topic} quick quiz`,
@@ -255,6 +259,33 @@ function accountingQuiz(topic = "Accounting") {
   };
 }
 
+function demandCurveQuiz() {
+  return {
+    title: "Demand curve quick quiz",
+    review: "Price and quantity demanded",
+    questions: [
+      {
+        question: "What does a demand curve show?",
+        options: ["The relationship between price and quantity demanded", "Only business profit", "The total number of sellers"],
+        answer: 0,
+        explanation: "A demand curve shows how much consumers are willing to buy at different prices.",
+      },
+      {
+        question: "What usually happens when price rises, assuming other factors stay the same?",
+        options: ["Quantity demanded decreases", "Quantity demanded always increases", "Demand disappears completely"],
+        answer: 0,
+        explanation: "The law of demand says price and quantity demanded usually move in opposite directions.",
+      },
+      {
+        question: "Why does a normal demand curve slope downward?",
+        options: ["Lower prices usually encourage more buying", "Higher prices always create more demand", "It shows production cost only"],
+        answer: 0,
+        explanation: "A downward slope means consumers generally buy more at lower prices and less at higher prices.",
+      },
+    ] satisfies QuizQuestion[],
+  };
+}
+
 function makeFlashcards(lessonInput: string, result?: LessonResult | null) {
   if (!result && /photosynthesis|chlorophyll/i.test(lessonInput)) return flashcards;
   const topic = getLessonTopic(lessonInput, result);
@@ -270,6 +301,9 @@ function makeFlashcards(lessonInput: string, result?: LessonResult | null) {
 }
 
 function makeQuiz(lessonInput: string, result?: LessonResult | null) {
+  if (isDemandCurveTopic(`${lessonInput} ${result?.title || ""} ${result?.summary || ""}`)) {
+    return demandCurveQuiz();
+  }
   if (isAccountingTopic(`${lessonInput} ${result?.title || ""}`)) {
     return accountingQuiz("Accounting");
   }
@@ -281,16 +315,16 @@ function makeQuiz(lessonInput: string, result?: LessonResult | null) {
   const steps = result?.steps?.length ? result.steps : ["Read the lesson once.", "Find the key words.", "Explain the idea simply."];
   const questions: QuizQuestion[] = [
     {
-      question: `What should you understand first about ${topic}?`,
-      options: ["The main idea", "Only the longest word", "The page number"],
+      question: `Which statement best explains ${topic}?`,
+      options: [result?.summary ? cleanText(result.summary).slice(0, 120) : `${topic} is the topic being studied.`, "Only the longest word in the topic", "Only the page number"],
       answer: 0,
-      explanation: "The main idea makes the rest of the lesson easier to organize.",
+      explanation: `Start by understanding what ${topic} means before memorizing details.`,
     },
     {
-      question: "Which detail should you remember?",
+      question: `Which detail is connected to ${topic}?`,
       options: [needs[0] || "Main idea", "An unrelated fact", "Only the title"],
       answer: 0,
-      explanation: "Important key words and facts help you rebuild the lesson in your own words.",
+      explanation: "Important key words and facts help you rebuild the topic in your own words.",
     },
     {
       question: "What is a helpful next step?",
