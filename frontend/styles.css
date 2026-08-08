@@ -133,6 +133,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .auth-tabs button.active { background: var(--surface); color: var(--accent-dark); box-shadow: 0 8px 20px rgba(31,52,43,.07); }
 .login-card form, .form-card { display: grid; gap: 18px; }
 .login-card label, .form-card label { display: grid; gap: 7px; font-size: 13px; font-weight: 720; }
+.verification-card { padding: 18px; border-radius: 16px; border: 1px dashed color-mix(in srgb, var(--accent) 48%, var(--line)); background: var(--accent-2); display: grid; gap: 8px; text-align: center; }
+.verification-card span { color: var(--accent-dark); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+.verification-card strong { font-size: 36px; letter-spacing: .18em; color: var(--text); }
+.verification-card p { color: var(--muted); margin: 0; font-size: 12px; line-height: 1.5; }
 input, textarea, select { color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
 input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .form-error { color: var(--danger); font-size: 13px; margin: 0; }

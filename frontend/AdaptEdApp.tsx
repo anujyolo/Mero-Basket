@@ -616,10 +616,13 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
 }
 
 function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void; onBack: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "verify">("login");
   const [name, setName] = useState("Anuj Adhikari");
   const [email, setEmail] = useState(() => readStoredJson<StudentAccount | null>(CURRENT_USER_KEY, null)?.email || "demo@student.com");
   const [password, setPassword] = useState("demo123");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [typedCode, setTypedCode] = useState("");
+  const [pendingAccount, setPendingAccount] = useState<StudentAccount | null>(null);
   const [error, setError] = useState("");
   const accounts = () => readStoredJson<Record<string, StudentAccount>>(USER_ACCOUNTS_KEY, {
     "demo@student.com": { name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() },
@@ -628,8 +631,30 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
     localStorage.setItem(USER_ACCOUNTS_KEY, JSON.stringify({ ...accounts(), [account.email.toLowerCase()]: account }));
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
   };
+  function beginSignupVerification(account: StudentAccount) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    setVerificationCode(code);
+    setTypedCode("");
+    setPendingAccount(account);
+    setMode("verify");
+    setError("");
+  }
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (mode === "verify") {
+      if (!pendingAccount) {
+        setMode("signup");
+        setError("Please create your account again.");
+        return;
+      }
+      if (typedCode.trim() !== verificationCode) {
+        setError("Verification code does not match.");
+        return;
+      }
+      saveAccount(pendingAccount);
+      onLogin(pendingAccount);
+      return;
+    }
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
     if (!cleanEmail.includes("@") || !cleanEmail.includes(".")) {
@@ -643,8 +668,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
     const stored = accounts();
     if (mode === "signup") {
       const account: StudentAccount = { name: name.trim() || displayNameFromEmail(cleanEmail), email: cleanEmail, password: cleanPassword, createdAt: new Date().toISOString() };
-      saveAccount(account);
-      onLogin(account);
+      beginSignupVerification(account);
       return;
     }
     const account = stored[cleanEmail];
@@ -667,17 +691,31 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
         </aside>
         <div className="login-card">
           <Logo />
-          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : "Create account."}</h1><p>{mode === "login" ? "Your email and password must match a saved account on this device." : "Save your email and password for this local hackathon demo."}</p></div>
-          <div className="auth-tabs" role="group" aria-label="Login mode">
+          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Verify your email."}</h1><p>{mode === "login" ? "Your email and password must match a saved account on this device." : mode === "signup" ? "Sign up first. You will verify your email before entering." : `We prepared a verification code for ${pendingAccount?.email || email}.`}</p></div>
+          {mode !== "verify" && <div className="auth-tabs" role="group" aria-label="Login mode">
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
             <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Create account</button>
-          </div>
+          </div>}
           <form onSubmit={submit}>
-            {mode === "signup" && <label>Full name<input value={name} onChange={(e) => setName(e.target.value)} type="text" autoComplete="name" /></label>}
-            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" /></label>
-            <label>Password<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" /></label>
+            {mode === "verify" ? (
+              <>
+                <div className="verification-card">
+                  <span>Demo verification code</span>
+                  <strong>{verificationCode}</strong>
+                  <p>In the real hosted version, this code would be sent to your email. For the hackathon demo, no email API is used.</p>
+                </div>
+                <label>Enter verification code<input value={typedCode} onChange={(e) => setTypedCode(e.target.value)} inputMode="numeric" placeholder="6-digit code" /></label>
+              </>
+            ) : (
+              <>
+                {mode === "signup" && <label>Full name<input value={name} onChange={(e) => setName(e.target.value)} type="text" autoComplete="name" /></label>}
+                <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" /></label>
+                <label>Password<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+              </>
+            )}
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="button primary large full" type="submit">{mode === "login" ? "Log in →" : "Create and enter →"}</button>
+            <button className="button primary large full" type="submit">{mode === "login" ? "Log in →" : mode === "signup" ? "Send verification →" : "Verify and enter →"}</button>
+            {mode === "verify" && <button className="button full" type="button" onClick={() => { setMode("signup"); setPendingAccount(null); setTypedCode(""); setError(""); }}>Change email</button>}
             <button className="button full" type="button" onClick={() => { setMode("login"); setEmail("demo@student.com"); setPassword("demo123"); setError(""); }}>Use demo account</button>
           </form>
           <div className="demo-credentials"><b>Demo login</b><span>demo@student.com</span><span>Password: demo123</span></div>
