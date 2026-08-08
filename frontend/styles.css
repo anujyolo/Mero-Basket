@@ -354,10 +354,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .progress-track, .one-progress { height: 7px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin: 20px 0; }
 .progress-track i, .one-progress i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .3s; }
 .task-list { display: grid; gap: 7px; }
-.task-list label { display: grid; grid-template-columns: 25px 34px 1fr; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 11px; cursor: pointer; }
+.task-list label { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 11px; cursor: pointer; }
 .task-list input { position: absolute; opacity: 0; }
 .task-list label > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--surface-2); font-size: 10px; }
-.task-list label > div { display: grid; }
+.task-list label > div { display: grid; min-width: 0; }
 .task-list b { font-size: 13px; }
 .task-list small { color: var(--subtle); font-size: 10px; }
 .task-list label.done { opacity: .65; }
