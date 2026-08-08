@@ -1209,12 +1209,20 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
         }
       }
     }
-    const response = await fetch("/api/study-invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: clean, topic, roomCode, roomMode, inviteLink, inviterName: currentUser.name }),
-    });
-    const data = await response.json().catch(() => ({ ok: false, error: "Invite failed." })) as { ok?: boolean; message?: string; error?: string };
+    let data: { ok?: boolean; message?: string; error?: string };
+    if (supabase) {
+      const { data: functionData, error: functionError } = await supabase.functions.invoke("send-study-invite", {
+        body: { email: clean, topic, roomCode, roomMode, inviteLink, inviterName: currentUser.name },
+      });
+      data = functionError ? { ok: false, error: functionError.message } : functionData as { ok?: boolean; message?: string; error?: string };
+    } else {
+      const response = await fetch("/api/study-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: clean, topic, roomCode, roomMode, inviteLink, inviterName: currentUser.name }),
+      });
+      data = await response.json().catch(() => ({ ok: false, error: "Invite failed." })) as { ok?: boolean; message?: string; error?: string };
+    }
     setInviteStatus(data.ok ? data.message || `Invite sent to ${clean}.` : data.error || "Invite could not be sent yet.");
     setFriendEmail("");
   };

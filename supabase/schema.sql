@@ -44,6 +44,14 @@ alter table public.study_invites enable row level security;
 alter table public.study_messages enable row level security;
 alter table public.group_quiz_attempts enable row level security;
 
+drop policy if exists "room owners can manage rooms" on public.study_rooms;
+drop policy if exists "invited users can read rooms" on public.study_rooms;
+drop policy if exists "users can manage invites they send" on public.study_invites;
+drop policy if exists "invited users can read their invites" on public.study_invites;
+drop policy if exists "room participants can read messages" on public.study_messages;
+drop policy if exists "users can send their own room messages" on public.study_messages;
+drop policy if exists "users can manage own quiz attempts" on public.group_quiz_attempts;
+
 create policy "room owners can manage rooms"
 on public.study_rooms
 for all
@@ -111,4 +119,3 @@ for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
-
