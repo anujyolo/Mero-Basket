@@ -35,14 +35,25 @@ Padhai Yatra can use Supabase Auth for real email verification links and Supabas
 
 If Supabase keys are missing, the app falls back to local demo login so the hackathon demo still works.
 
+### Email delivery
+
+Supabase's built-in mailer only delivers to project team members and allows roughly two
+messages an hour, so signup confirmation email often does not arrive for other addresses.
+Login therefore never depends on it: signup also stores a device-local account, password
+login falls back to that account, and the verify screen offers **Continue without email**.
+
+Study Together invites work the same way. The shareable room link is the invite — it is
+generated and copied to the clipboard immediately. Emailing it is best-effort and needs
+`SUPABASE_SECRET_KEY` set.
+
 ## Run locally
 
 ```bash
 npm install
-npm run dev -- --port 3002
+npm run dev
 ```
 
-Open [http://localhost:3002](http://localhost:3002).
+Open [http://localhost:3002](http://localhost:3002). The port is set in `package.json`, so no flag is needed.
 
 ## Repository structure
 
@@ -65,7 +76,10 @@ Start with [`frontend/AdaptEdApp.tsx`](frontend/AdaptEdApp.tsx) for the product 
 - Three-question knowledge check with weak-area review
 - Assignment breakdown and one-task mode
 - Study planner and exam rescue mode
-- Flashcards, focus timer, routine support, and progress view
+- Flashcards, routine support, and progress view
+- Focus timer with a completion chime and encouragement
+- Study Together rooms with shareable invite links and group quizzes
+- Student XP ranks (Beginner → Master) with day-by-day growth tracking
 - Teacher communication helper
 - Light, dark, and Calm modes
 - Responsive and keyboard-accessible interface
