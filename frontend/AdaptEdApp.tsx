@@ -19,6 +19,7 @@ type View =
   | "progress"
   | "resources"
   | "preferences"
+  | "profile"
   | "settings";
 
 type Preferences = {
@@ -622,7 +623,7 @@ function Login({ onLogin, onBack }: { onLogin: (email: string, password: string)
   );
 }
 
-function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onHistory }: { title: string; calm: boolean; setCalm: (v: boolean) => void; theme: string; toggleTheme: () => void; onMenu: () => void; aiMode: "checking" | "live" | "demo"; onHistory: () => void }) {
+function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onProfile }: { title: string; calm: boolean; setCalm: (v: boolean) => void; theme: string; toggleTheme: () => void; onMenu: () => void; aiMode: "checking" | "live" | "demo"; onProfile: () => void }) {
   return (
     <header className="app-header">
       <button className="icon-button mobile-menu" onClick={onMenu} aria-label="Open navigation">☰</button>
@@ -631,7 +632,7 @@ function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onHi
         <span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "checking" ? "Checking Adapt…" : aiMode === "live" ? "Adapt AI live" : "Adapt demo ready"}</span>
         <label className="calm-toggle"><input type="checkbox" checked={calm} onChange={(e) => setCalm(e.target.checked)} /><span className="switch" /><b>Calm mode</b></label>
         <button className="icon-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>{theme === "light" ? "☾" : "☀"}</button>
-        <button className="avatar profile-button" onClick={onHistory} aria-label="Open Anuj history">A</button>
+        <button className="avatar profile-button" onClick={onProfile} aria-label="Open Anuj profile">A</button>
       </div>
     </header>
   );
@@ -689,7 +690,7 @@ function Sidebar({ view, setView, calm, open, close, logout }: { view: View; set
       <div className="side-bottom">
         <button onClick={() => setView("settings")}><span>⚙</span>Settings</button>
         <button onClick={logout}><span>↪</span>Log out</button>
-        <div className="profile-mini"><div className="avatar">A</div><div><b>Anuj Adhikari</b><span>Student · Demo</span></div></div>
+        <button className={`profile-mini ${view === "profile" ? "active" : ""}`} onClick={() => { setView("profile"); close(); }} aria-label="Open Anuj profile"><div className="avatar">A</div><div><b>Anuj Adhikari</b><span>Student · Demo</span></div></button>
       </div>
     </aside>
   );
@@ -1142,6 +1143,43 @@ function PreferencesPage({ preferences, setPreferences }: { preferences: Prefere
   return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> MY LEARNING STYLE</span><h2>Choose what helps you learn.</h2><p>No medical questions. No labels. You can change these preferences at any time.</p></section><section className="preferences-form"><fieldset><legend>How do you prefer explanations?</legend><div className="segmented">{["Short & Simple", "Normal", "Detailed"].map((x) => <label className={preferences.explanation === x ? "selected" : ""} key={x}><input type="radio" name="explanation" checked={preferences.explanation === x} onChange={() => update("explanation", x as Preferences["explanation"])} />{x}</label>)}</div></fieldset><fieldset><legend>Which learning tools help you?</legend><div className="check-grid">{tools.map((tool) => <label className={preferences.tools.includes(tool) ? "selected" : ""} key={tool}><input type="checkbox" checked={preferences.tools.includes(tool)} onChange={() => update("tools", preferences.tools.includes(tool) ? preferences.tools.filter((t) => t !== tool) : [...preferences.tools, tool])} /><span>✓</span>{tool}</label>)}</div></fieldset><fieldset><legend>Study interface</legend><div className="segmented">{["Normal", "Low distraction", "One task at a time"].map((x) => <label className={preferences.interface === x ? "selected" : ""} key={x}><input type="radio" name="interface" checked={preferences.interface === x} onChange={() => update("interface", x as Preferences["interface"])} />{x}</label>)}</div></fieldset><fieldset><legend>Preferred study session</legend><div className="segmented compact">{[10, 15, 20, 25, 30].map((n) => <label className={preferences.session === n ? "selected" : ""} key={n}><input type="radio" name="session" checked={preferences.session === n} onChange={() => update("session", n)} />{n} min</label>)}</div></fieldset><fieldset><legend>Do you prefer predictable task sequences?</legend><div className="segmented compact"><label className={preferences.predictable ? "selected" : ""}><input type="radio" name="predictable" checked={preferences.predictable} onChange={() => update("predictable", true)} />Yes</label><label className={!preferences.predictable ? "selected" : ""}><input type="radio" name="predictable" checked={!preferences.predictable} onChange={() => update("predictable", false)} />No</label></div></fieldset><div className="saved-note"><span>✓</span><div><b>Preferences saved automatically</b><small>Every demo AI response will use these choices.</small></div></div></section></div>;
 }
 
+function ProfilePage({ preferences, quizAttempts, studySessions, setView, openHistory }: { preferences: Preferences; quizAttempts: QuizAttempt[]; studySessions: StudySession[]; setView: (view: View) => void; openHistory: () => void }) {
+  const totalStudySeconds = studySessions.reduce((sum, session) => sum + session.durationSeconds, 0);
+  const averageScore = quizAttempts.length ? Math.round((quizAttempts.reduce((sum, attempt) => sum + attempt.score / attempt.total, 0) / quizAttempts.length) * 100) : 0;
+  return (
+    <div className="page-content work-page">
+      <section className="profile-hero">
+        <div className="profile-avatar-large">A</div>
+        <div>
+          <span className="eyebrow"><i /> MY PROFILE</span>
+          <h2>Anuj Adhikari</h2>
+          <p>Student · Demo account · Grade 11 focus</p>
+        </div>
+        <button className="button primary" onClick={openHistory}>View full history</button>
+      </section>
+
+      <section className="stats-grid">
+        <StatCard label="Quizzes done" value={String(quizAttempts.length)} note={`${averageScore}% average`} icon="⚡" />
+        <StatCard label="Study time" value={formatDuration(totalStudySeconds)} note="From Focus sessions" icon="◷" />
+        <StatCard label="Preferred session" value={`${preferences.session}m`} note={preferences.interface} icon="◎" />
+        <StatCard label="Tools selected" value={String(preferences.tools.length)} note={preferences.explanation} icon="✓" />
+      </section>
+
+      <section className="profile-grid">
+        <article className="settings-card">
+          <div><span><b>Learning style</b><small>{preferences.explanation} · {preferences.interface}</small></span><button className="button" onClick={() => setView("preferences")}>Edit</button></div>
+          <div><span><b>Helpful tools</b><small>{preferences.tools.slice(0, 4).join(", ") || "No tools selected"}</small></span><button className="button" onClick={() => setView("learn")}>Study</button></div>
+          <div><span><b>Books</b><small>Grade 11 reference materials connected locally.</small></span><button className="button" onClick={() => setView("resources")}>Open books</button></div>
+        </article>
+        <article className="topic-progress">
+          <div className="card-title"><div><span className="eyebrow"><i /> RECENT QUIZZES</span><h2>Quiz attempts</h2></div><button className="button" onClick={() => setView("quiz")}>Take quiz</button></div>
+          {quizAttempts.length ? quizAttempts.slice(0, 5).map((attempt) => <div key={attempt.id}><span><b>{attempt.topic}</b><small>{new Date(attempt.date).toLocaleString()}</small></span><strong>{attempt.score}/{attempt.total}</strong><i><em style={{ width: `${Math.round((attempt.score / attempt.total) * 100)}%` }} /></i></div>) : <div><span><b>No quizzes yet</b><small>Complete a quiz to start profile history.</small></span><strong>0/5</strong><i><em style={{ width: "0%" }} /></i></div>}
+        </article>
+      </section>
+    </div>
+  );
+}
+
 function AdaptHelper({ open, setOpen, setView }: { open: boolean; setOpen: (v: boolean) => void; setView: (v: View) => void }) {
   return <div className={`adapt-helper ${open ? "open" : ""}`}><button className="adapt-launcher" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? "Close Adapt helper" : "Open Adapt helper"}><span>✦</span><b>{open ? "Close" : "Ask Adapt"}</b></button>{open && <aside className="adapt-popover" aria-label="Adapt learning helper"><div className="adapt-helper-head"><div className="adapt-face">A</div><div><b>Hi, I&apos;m Adapt.</b><small>What would help right now?</small></div></div><div className="helper-actions"><button onClick={() => { setView("learn"); setOpen(false); }}>✦ Explain something</button><button onClick={() => { setView("assignments"); setOpen(false); }}>☑ Make work smaller</button><button onClick={() => { setView("communicate"); setOpen(false); }}>◌ Help me ask for help</button><button onClick={() => { setView("focus"); setOpen(false); }}>◎ Help me focus</button></div><p>Adapt supports learning. It does not diagnose or judge students.</p></aside>}</div>;
 }
@@ -1195,7 +1233,7 @@ export default function Home() {
     localStorage.setItem(QUIZ_ATTEMPTS_KEY, JSON.stringify(quizAttempts));
   }, [quizAttempts]);
 
-  const title = useMemo(() => navItems.find((n) => n.id === view)?.label || (view === "settings" ? "Settings" : "AdaptEd"), [view]);
+  const title = useMemo(() => navItems.find((n) => n.id === view)?.label || (view === "settings" ? "Settings" : view === "profile" ? "My profile" : "AdaptEd"), [view]);
   const toggleTheme = () => setTheme((t) => t === "light" ? "dark" : "light");
   const recordStudySession = useCallback((session: StudySession) => {
     setStudySessions((current) => current.some((item) => item.id === session.id) ? current : [session, ...current].slice(0, 100));
@@ -1248,7 +1286,7 @@ export default function Home() {
       <Sidebar view={view} setView={setView} calm={calm} open={menuOpen} close={() => setMenuOpen(false)} logout={() => setScreen("landing")} />
       {menuOpen && <button className="nav-overlay" onClick={() => setMenuOpen(false)} aria-label="Close navigation overlay" />}
       <div className="app-main">
-        <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} onHistory={() => setHistoryOpen(true)} />
+        <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} onProfile={() => setView("profile")} />
         {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardAdapt} lessonResult={lessonResult} />}
         {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} lessonAnalysis={lessonAnalysis} loading={loading} stage={stage} runAction={runAdapt} showQuiz={showQuiz} setShowQuiz={setShowQuiz} onQuizComplete={recordQuizAttempt} />}
         {view === "assignments" && <AssignmentsPage calm={calm} />}
@@ -1261,6 +1299,7 @@ export default function Home() {
         {view === "progress" && <ProgressPage sessions={studySessions} />}
         {view === "resources" && <ResourcesPage setLessonInput={setLessonInput} setView={setView} />}
         {view === "preferences" && <PreferencesPage preferences={preferences} setPreferences={setPreferences} />}
+        {view === "profile" && <ProfilePage preferences={preferences} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} openHistory={() => setHistoryOpen(true)} />}
         {view === "settings" && <SettingsPage theme={theme} toggleTheme={toggleTheme} calm={calm} setCalm={setCalm} aiMode={aiMode} />}
       </div>
       <AdaptHelper open={helperOpen} setOpen={setHelperOpen} setView={setView} />
