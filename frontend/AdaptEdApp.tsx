@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- local homework previews use browser data URLs. */
+
 // Main frontend application: screens, interactions, and accessibility behavior.
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -59,6 +61,8 @@ type FocusState = {
   savedFocusSeconds?: number;
 };
 
+const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v2";
+
 function readStoredJson<T>(key: string, fallback: T) {
   if (typeof window === "undefined") return fallback;
   const raw = window.localStorage.getItem(key);
@@ -70,6 +74,15 @@ function readStoredJson<T>(key: string, fallback: T) {
   }
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 type QuizQuestion = {
   question: string;
   options: string[];
@@ -78,6 +91,7 @@ type QuizQuestion = {
 };
 
 type AssignmentTask = { title: string; minutes: number; done: boolean };
+type AssignmentResponse = { detectedHomework?: string; tasks?: { title: string; minutes: number }[]; answer?: string };
 
 const defaultPreferences: Preferences = {
   explanation: "Short & Simple",
@@ -488,28 +502,62 @@ function LearnPage({ lessonInput, setLessonInput, result, lessonAnalysis, loadin
 function AssignmentsPage({ calm }: { calm: boolean }) {
   const [text, setText] = useState("");
   const [tasks, setTasks] = useState<AssignmentTask[]>([]);
+  const [photo, setPhoto] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [detectedHomework, setDetectedHomework] = useState("");
+  const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [oneTask, setOneTask] = useState(false);
   const current = Math.max(0, tasks.findIndex((t) => !t.done));
   const completed = tasks.filter((t) => t.done).length;
-  function generate() { setLoading(true); setTimeout(() => { setTasks(initialTasks); setLoading(false); }, 1100); }
+  async function addPhoto(file?: File) {
+    if (!file) return;
+    setPhoto({ name: file.name, dataUrl: await readFileAsDataUrl(file) });
+    setTasks([]);
+    setAnswer("");
+    setDetectedHomework("");
+  }
+  async function generate() {
+    setLoading(true);
+    setOneTask(false);
+    try {
+      const response = await fetch("/api/assignment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, imageData: photo?.dataUrl }),
+      });
+      if (!response.ok) throw new Error("Assignment failed");
+      const data = await response.json() as AssignmentResponse;
+      setDetectedHomework(data.detectedHomework || "");
+      setAnswer(data.answer || "");
+      setTasks((data.tasks || []).map((task) => ({ ...task, done: false })));
+    } catch {
+      setDetectedHomework(text || (photo ? "Homework photo attached" : ""));
+      setAnswer("Adapt could not read this assignment yet. Try typing the question or retaking a clearer photo.");
+      setTasks(initialTasks);
+    } finally {
+      setLoading(false);
+    }
+  }
   function toggle(i: number) { setTasks((list) => list.map((t, ti) => ti === i ? { ...t, done: !t.done } : t)); }
   if ((oneTask || calm) && tasks.length) {
     const task = tasks[current] || tasks[tasks.length - 1];
     return <div className="page-content one-task-page"><span className="eyebrow"><i /> ONE TASK MODE</span><div className="one-task-card"><span>CURRENT TASK · {Math.min(current + 1, tasks.length)} OF {tasks.length}</span><div className="one-icon">{task.done ? "✓" : "▤"}</div><h2>{task.done ? "All tasks complete" : task.title}</h2><p>Estimated time: <b>{task.minutes} minutes</b></p><div className="one-progress"><i style={{ width: `${(completed / tasks.length) * 100}%` }} /></div><small>{completed} of {tasks.length} complete</small><div className="one-actions"><button className="button" onClick={() => setOneTask(false)}>See full plan</button><button className="button">Need help</button><button className="button">Take break</button>{!task.done && <button className="button primary" onClick={() => toggle(current)}>Complete task ✓</button>}</div></div></div>;
   }
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> ASSIGNMENT SUPPORT</span><h2>Break my assignment</h2><p>Turn a large instruction into clear, manageable steps with realistic time estimates.</p></section><section className="composer-card"><label htmlFor="assignment">Paste your assignment</label><textarea id="assignment" value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the homework, project instructions, or study task here..." /><button className="button primary large" disabled={!text.trim() || loading} onClick={generate}>{loading ? "Building your plan…" : "Create step-by-step plan →"}</button></section>{tasks.length > 0 && !loading && <section className="assignment-plan"><div className="card-title"><div><span className="eyebrow"><i /> YOUR ASSIGNMENT PLAN</span><h2>{completed} / {tasks.length} completed</h2></div><button className="button" onClick={() => setOneTask(true)}>Enter one task mode</button></div><div className="progress-track"><i style={{ width: `${(completed / tasks.length) * 100}%` }} /></div><div className="task-list">{tasks.map((task, i) => <label className={task.done ? "done" : ""} key={`${task.title}-${i}`}><input type="checkbox" checked={task.done} onChange={() => toggle(i)} /><span>{task.done ? "✓" : i + 1}</span><div><b>{task.title}</b><small>{task.minutes} minutes</small></div></label>)}</div></section>}</div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> ASSIGNMENT SUPPORT</span><h2>Break my assignment</h2><p>Turn a large instruction into clear, manageable steps with realistic time estimates.</p></section><section className="composer-card"><label htmlFor="assignment">Paste your assignment</label><textarea id="assignment" value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the homework, project instructions, or study task here..." /><div className="photo-upload-row"><label className="photo-upload"><input type="file" accept="image/*" onChange={(e) => addPhoto(e.target.files?.[0])} /><span>Attach homework photo</span></label>{photo && <div className="photo-preview"><img src={photo.dataUrl} alt={`Attached homework photo: ${photo.name}`} /><div><b>{photo.name}</b><button onClick={() => { setPhoto(null); setAnswer(""); setDetectedHomework(""); }}>Remove photo</button></div></div>}</div><button className="button primary large" disabled={(!text.trim() && !photo) || loading} onClick={generate}>{loading ? "Reading homework…" : photo ? "Read photo and create plan →" : "Create step-by-step plan →"}</button></section>{(detectedHomework || answer) && !loading && <section className="assignment-answer"><span className="eyebrow"><i /> HOMEWORK READ</span>{detectedHomework && <p>{detectedHomework}</p>}{answer && <b>{answer}</b>}</section>}{tasks.length > 0 && !loading && <section className="assignment-plan"><div className="card-title"><div><span className="eyebrow"><i /> YOUR ASSIGNMENT PLAN</span><h2>{completed} / {tasks.length} completed</h2></div><button className="button" onClick={() => setOneTask(true)}>Enter one task mode</button></div><div className="progress-track"><i style={{ width: `${(completed / tasks.length) * 100}%` }} /></div><div className="task-list">{tasks.map((task, i) => <label className={task.done ? "done" : ""} key={`${task.title}-${i}`}><input type="checkbox" checked={task.done} onChange={() => toggle(i)} /><span>{task.done ? "✓" : i + 1}</span><div><b>{task.title}</b><small>{task.minutes} minutes</small></div></label>)}</div></section>}</div>;
 }
 
 function PlannerPage() {
-  const [subject, setSubject] = useState("Biology");
+  const [subject, setSubject] = useState("");
   const [minutes, setMinutes] = useState(60);
   const [exam, setExam] = useState("Tomorrow");
-  const [topics, setTopics] = useState("Cells, Photosynthesis, Respiration");
+  const [topics, setTopics] = useState("");
   const [ready, setReady] = useState(false);
   const [done, setDone] = useState<number[]>([]);
-  const slots = [["0–15 min", "Cells", "Review foundations"], ["15–30 min", "Photosynthesis", "Focus topic"], ["30–35 min", "Short break", "Reset"], ["35–50 min", "Respiration", "Practice"], ["50–60 min", "Mini quiz", "Knowledge check"]];
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> STUDY PLANNER</span><h2>Plan around the time you have.</h2><p>A focused plan with breaks, priorities, and a clear finish line.</p></section><section className="planner-grid"><form className="form-card" onSubmit={(e) => { e.preventDefault(); setReady(true); }}><label>What are you studying?<input value={subject} onChange={(e) => setSubject(e.target.value)} /></label><label>How much time do you have?<select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}><option>30</option><option>45</option><option>60</option><option>90</option><option>120</option></select></label><label>When is your exam?<select value={exam} onChange={(e) => setExam(e.target.value)}><option>Tomorrow</option><option>This week</option><option>Next week</option></select></label><label>Topics<textarea value={topics} onChange={(e) => setTopics(e.target.value)} /></label><button className="button primary large" type="submit">Build my plan →</button></form><aside className="rescue-card"><span>EXAM TOMORROW?</span><h3>Exam Rescue Mode</h3><p>Adapt will prioritize weak areas, protect break time, and keep the plan realistic.</p><div><b>🔴 Photosynthesis</b><small>More time · needs practice</small></div><div><b>🟡 Respiration</b><small>Moderate review</small></div><div><b>🟢 Cell structure</b><small>Quick refresh</small></div></aside></section>{ready && <section className="generated-plan"><div className="card-title"><div><span className="eyebrow"><i /> {minutes}-MINUTE PLAN</span><h2>{subject} · {exam}</h2></div><span className="preference-chip">Based on your learning style</span></div>{slots.map((s, i) => <button className={done.includes(i) ? "done" : ""} onClick={() => setDone((d) => d.includes(i) ? d.filter((x) => x !== i) : [...d, i])} key={s[0]}><span>{done.includes(i) ? "✓" : i + 1}</span><b>{s[0]}</b><div><strong>{s[1]}</strong><small>{s[2]}</small></div></button>)}</section>}</div>;
+  const topicList = (topics || subject || "Main topic").split(/,|\n/).map((topic) => topic.trim()).filter(Boolean);
+  const focusTopics = topicList.length ? topicList : [subject || "Main topic"];
+  const planSubject = subject.trim() || focusTopics[0] || "Study plan";
+  const slots = [["0-10 min", focusTopics[0], "Review the basics"], ["10-20 min", focusTopics[1] || focusTopics[0], "Practice examples"], ["20-25 min", "Short break", "Reset"], ["25-35 min", focusTopics[2] || focusTopics[0], "Solve questions"], ["35-45 min", "Mini quiz", "Check understanding"]].slice(0, minutes <= 30 ? 4 : 5);
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> STUDY PLANNER</span><h2>Plan around the time you have.</h2><p>A focused plan with breaks, priorities, and a clear finish line.</p></section><section className="planner-grid"><form className="form-card" onSubmit={(e) => { e.preventDefault(); setDone([]); setReady(true); }}><label>What are you studying?<input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Maths, accounting, science..." /></label><label>How much time do you have?<select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}><option>30</option><option>45</option><option>60</option><option>90</option><option>120</option></select></label><label>When is your exam?<select value={exam} onChange={(e) => setExam(e.target.value)}><option>Tomorrow</option><option>This week</option><option>Next week</option></select></label><label>Topics<textarea value={topics} onChange={(e) => setTopics(e.target.value)} placeholder="Algebra, fractions, word problems..." /></label><button className="button primary large" type="submit">Build my plan →</button></form><aside className="rescue-card"><span>EXAM TOMORROW?</span><h3>Exam Rescue Mode</h3><p>Adapt will prioritize weak areas, protect break time, and keep the plan realistic.</p>{focusTopics.slice(0, 3).map((topic, i) => <div key={`${topic}-${i}`}><b>{topic}</b><small>{i === 0 ? "Focus first" : i === 1 ? "Practice next" : "Quick refresh"}</small></div>)}</aside></section>{ready && <section className="generated-plan"><div className="card-title"><div><span className="eyebrow"><i /> {minutes}-MINUTE PLAN</span><h2>{planSubject} · {exam}</h2></div><span className="preference-chip">Based on your learning style</span></div>{slots.map((s, i) => <button className={done.includes(i) ? "done" : ""} onClick={() => setDone((d) => d.includes(i) ? d.filter((x) => x !== i) : [...d, i])} key={`${s[0]}-${s[1]}`}><span>{done.includes(i) ? "✓" : i + 1}</span><b>{s[0]}</b><div><strong>{s[1]}</strong><small>{s[2]}</small></div></button>)}</section>}</div>;
 }
 
 function FlashcardsPage({ lessonInput, lessonResult }: { lessonInput: string; lessonResult: LessonResult | null }) {
@@ -592,7 +640,7 @@ export default function Home() {
   const [showQuiz, setShowQuiz] = useState(false);
   const [aiMode, setAiMode] = useState<"checking" | "live" | "demo">("checking");
   const [helperOpen, setHelperOpen] = useState(false);
-  const [analysisCache, setAnalysisCache] = useState<Record<string, LessonAnalysis>>(() => readStoredJson("adapted-analysis-cache", {}));
+  const [analysisCache, setAnalysisCache] = useState<Record<string, LessonAnalysis>>(() => readStoredJson(ANALYSIS_CACHE_KEY, {}));
   const [focusState, setFocusState] = useState<FocusState>(() => readStoredJson("adapted-focus-state", { mode: "focus", duration: 15, seconds: 15 * 60, running: false }));
 
   useEffect(() => {
@@ -607,7 +655,7 @@ export default function Home() {
   useEffect(() => { localStorage.setItem("adapted-preferences", JSON.stringify(preferences)); }, [preferences]);
   useEffect(() => { fetch("/api/status").then((r) => r.json()).then((data: { mode?: string }) => setAiMode(data.mode === "LIVE_AI" ? "live" : "demo")).catch(() => setAiMode("demo")); }, []);
   useEffect(() => {
-    localStorage.setItem("adapted-analysis-cache", JSON.stringify(analysisCache));
+    localStorage.setItem(ANALYSIS_CACHE_KEY, JSON.stringify(analysisCache));
   }, [analysisCache]);
   useEffect(() => {
     localStorage.setItem("adapted-focus-state", JSON.stringify(focusState));

@@ -103,6 +103,24 @@ test("uses the real topic when adapting a full paragraph", async () => {
   assert.match(data.result.summary, /evaporation|condensation|precipitation/i);
 });
 
+test("creates assignment steps from typed homework", async () => {
+  workerUrl.searchParams.set("assignment-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/assignment", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "Solve questions 1 to 5 on algebra and show your work." }),
+    }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.ok(data.tasks.length >= 1);
+  assert.match(data.detectedHomework, /algebra/i);
+});
+
 test("reports a ready AI mode without exposing credentials", async () => {
   workerUrl.searchParams.set("status-test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);

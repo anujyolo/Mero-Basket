@@ -123,6 +123,8 @@ function getKeywords(content: string) {
 
 function getTopic(content: string) {
   const firstSentence = splitSentences(content)[0] || content;
+  const contextMatch = firstSentence.match(/^(?:in|about|for)\s+([A-Za-z][A-Za-z-]{2,30})\b/i);
+  if (contextMatch?.[1]) return sentenceCase(contextMatch[1].trim());
   const phraseMatch = firstSentence.match(/^(?:the\s+)?([A-Za-z][A-Za-z\s-]{2,60}?)\s+(?:is|are|was|were|means|refers to|describes|explains|happens|occurs|uses|contains|includes|helps)\b/i);
   if (phraseMatch?.[1]) {
     const rawPhrase = sentenceCase(phraseMatch[1].trim());

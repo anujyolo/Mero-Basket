@@ -181,7 +181,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .stat-card small { color: var(--subtle); font-size: 10px; align-self: end; }
 .dashboard-grid { display: grid; grid-template-columns: 1fr 310px; gap: 18px; }
 .primary-column { min-width: 0; }
-.help-card, .composer-card, .result-card, .quiz-card, .assignment-plan, .form-card, .generated-plan, .preferences-form, .settings-card, .topic-progress, .week-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
+.help-card, .composer-card, .result-card, .quiz-card, .assignment-plan, .assignment-answer, .form-card, .generated-plan, .preferences-form, .settings-card, .topic-progress, .week-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
 .help-card h2 { font-family: Georgia, serif; font-size: 30px; margin: 12px 0 3px; font-weight: 500; letter-spacing: -.025em; }
 .help-card > p { color: var(--muted); margin: 0 0 18px; }
 .help-card textarea, .composer-card textarea { width: 100%; min-height: 120px; resize: vertical; background: var(--bg); }
@@ -293,7 +293,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .loading-lines { width: min(430px, 90%); margin: 20px auto 0; display: grid; gap: 8px; }
 .loading-lines i { height: 9px; border-radius: 10px; background: var(--surface-2); overflow: hidden; }
 .loading-lines i::after { content: ""; display: block; width: 40%; height: 100%; background: var(--accent-2); animation: shimmer 1.5s ease infinite; }
-.result-card, .quiz-card, .assignment-plan, .generated-plan { margin-top: 18px; }
+.result-card, .quiz-card, .assignment-plan, .assignment-answer, .generated-plan { margin-top: 18px; }
 .result-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
 .result-head h2 { font-family: Georgia, serif; font-size: clamp(28px, 4vw, 38px); line-height: 1.12; margin: 8px 0 0; font-weight: 500; }
 .preference-chip { padding: 7px 10px; border-radius: 99px; background: var(--surface-2); color: var(--muted); font-size: 10px; white-space: nowrap; }
@@ -334,6 +334,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .task-list small { color: var(--subtle); font-size: 10px; }
 .task-list label.done { opacity: .65; }
 .task-list label.done b { text-decoration: line-through; }
+.photo-upload-row { display: grid; gap: 10px; }
+.photo-upload { min-height: 54px; border: 1px dashed var(--accent); border-radius: 13px; background: var(--accent-2); color: var(--accent-dark); display: grid; place-items: center; cursor: pointer; font-size: 12px; font-weight: 760; }
+.photo-upload input { position: absolute; opacity: 0; pointer-events: none; }
+.photo-preview { display: grid; grid-template-columns: 84px 1fr; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 13px; padding: 10px; background: var(--surface-2); }
+.photo-preview img { width: 84px; height: 72px; object-fit: cover; border-radius: 9px; border: 1px solid var(--line); }
+.photo-preview div { display: grid; gap: 4px; }
+.photo-preview b { font-size: 12px; }
+.photo-preview button { width: max-content; border: 0; background: transparent; color: var(--danger); padding: 0; font-size: 11px; font-weight: 750; cursor: pointer; }
+.assignment-answer p { color: var(--muted); margin: 12px 0 7px; }
+.assignment-answer > b { display: block; padding: 14px; border-radius: 12px; background: var(--surface-2); font-size: 13px; }
 .one-task-page { max-width: 800px; text-align: center; padding-top: 80px; }
 .one-task-card { background: var(--surface); border: 1px solid var(--line); border-radius: 30px; padding: 60px; box-shadow: var(--shadow); }
 .one-task-card > span { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
