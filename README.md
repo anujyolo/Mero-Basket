@@ -2,7 +2,21 @@
 
 > Learn Anytime, Anywhere.
 
-Mero Basket is the hackathon project repository for Padhai Yatra, a Grade 11 learning companion that explains topics, builds quizzes, finds videos, plans study time, and adapts support to each student’s selected learning preferences. It is an educational accessibility tool for all students and does not provide medical or diagnostic assessments.
+Padhai Yatra is an 11th grade study friend that uses AI to help students study in a way that's
+easier and more personal. The idea came from something we noticed — students usually aren't
+struggling because they don't care, they're struggling because the way subjects get taught doesn't
+match how they actually think.
+
+So we didn't want to build just another chatbot that throws answers at you. We wanted something that
+explains a topic properly, until it actually clicks, gives quizzes based on where you're weak, and
+helps you plan your study time so it's not a last-minute mess the night before exams. It also helps
+with something most students never do — figuring out how to tell a teacher they're struggling.
+
+We kept the interface calm and simple on purpose, since studying already feels stressful enough on
+its own. This isn't about diagnosing anyone or replacing teachers. It's just about giving students
+something that actually meets them where they are.
+
+By Dikshant Shrestha, Anuj Adhikari, and Sammep Karki.
 
 ## Hackathon team
 
