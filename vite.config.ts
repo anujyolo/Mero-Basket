@@ -56,6 +56,10 @@ export default defineConfig(async () => {
     server: {
       host: true,
       port: 3002,
+      // Vite 403s any Host header it does not recognise. Allow Cloudflare quick
+      // tunnels so a shared demo link works. Scoped to that one domain on
+      // purpose — `true` would accept any hostname, including rebinding attacks.
+      allowedHosts: [".trycloudflare.com"],
       ...(isCodexSeatbeltSandbox ? { watch: { useFsEvents: false, usePolling: true } } : {}),
     },
     plugins: [
