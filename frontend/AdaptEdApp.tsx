@@ -16,6 +16,7 @@ type View =
   | "focus"
   | "routine"
   | "communicate"
+  | "studyroom"
   | "progress"
   | "resources"
   | "preferences"
@@ -106,10 +107,19 @@ type QuizAttempt = {
   questions: string[];
 };
 
+type StudentAccount = {
+  name: string;
+  email: string;
+  password: string;
+  createdAt: string;
+};
+
 const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v4";
 const STUDY_SESSIONS_KEY = "adapted-study-sessions-v1";
 const ROUTINE_KEY = "adapted-routine-v1";
 const QUIZ_ATTEMPTS_KEY = "adapted-quiz-attempts-v1";
+const USER_ACCOUNTS_KEY = "padhai-yatra-accounts-v1";
+const CURRENT_USER_KEY = "padhai-yatra-current-user-v1";
 
 function readStoredJson<T>(key: string, fallback: T) {
   if (typeof window === "undefined") return fallback;
@@ -129,6 +139,15 @@ function readFileAsDataUrl(file: File) {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+function displayNameFromEmail(email: string) {
+  const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  return name ? name.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Student";
+}
+
+function initialsFor(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "A";
 }
 
 type QuizQuestion = {
@@ -162,6 +181,7 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "focus", label: "Focus", icon: "◎" },
   { id: "routine", label: "Routine", icon: "◷" },
   { id: "communicate", label: "Ask for help", icon: "◌" },
+  { id: "studyroom", label: "Study Together", icon: "☷" },
   { id: "progress", label: "Progress", icon: "↗" },
   { id: "resources", label: "My Books", icon: "▣" },
   { id: "preferences", label: "Learning style", icon: "⚙" },
@@ -543,11 +563,6 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
           </div>
         </div>
         <div className="adapt-visual" aria-label="Example of Padhai Yatra simplifying a lesson">
-          <div className="brand-preview">
-            <img src="/padhai-yatra-logo.png" alt="Padhai Yatra logo" />
-            <b>Padhai Yatra</b>
-            <span>Learn Anytime, Anywhere</span>
-          </div>
           <div className="paper original-paper">
             <span className="paper-label">ORIGINAL LESSON</span>
             <p>Evaporation is the process by which molecules in a liquid state acquire sufficient kinetic energy to transition into the gaseous state.</p>
@@ -600,35 +615,80 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
   );
 }
 
-function Login({ onLogin, onBack }: { onLogin: (email: string, password: string) => void; onBack: () => void }) {
-  const [email, setEmail] = useState("demo@student.com");
+function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void; onBack: () => void }) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [name, setName] = useState("Anuj Adhikari");
+  const [email, setEmail] = useState(() => readStoredJson<StudentAccount | null>(CURRENT_USER_KEY, null)?.email || "demo@student.com");
   const [password, setPassword] = useState("demo123");
   const [error, setError] = useState("");
+  const accounts = () => readStoredJson<Record<string, StudentAccount>>(USER_ACCOUNTS_KEY, {
+    "demo@student.com": { name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() },
+  });
+  const saveAccount = (account: StudentAccount) => {
+    localStorage.setItem(USER_ACCOUNTS_KEY, JSON.stringify({ ...accounts(), [account.email.toLowerCase()]: account }));
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
+  };
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (email.trim() && password.trim()) onLogin(email, password);
-    else setError("Enter your email and password to continue.");
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+    if (!cleanEmail.includes("@") || !cleanEmail.includes(".")) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    if (cleanPassword.length < 4) {
+      setError("Password must be at least 4 characters for this demo.");
+      return;
+    }
+    const stored = accounts();
+    if (mode === "signup") {
+      const account: StudentAccount = { name: name.trim() || displayNameFromEmail(cleanEmail), email: cleanEmail, password: cleanPassword, createdAt: new Date().toISOString() };
+      saveAccount(account);
+      onLogin(account);
+      return;
+    }
+    const account = stored[cleanEmail];
+    if (!account || account.password !== cleanPassword) {
+      setError("Email and password do not match. Create an account first or use the demo account.");
+      return;
+    }
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
+    onLogin(account);
   }
   return (
     <main className="login-page">
-      <button className="back-link" onClick={onBack}>← Back to home</button>
-      <section className="login-card">
-        <Logo />
-        <div className="login-heading"><span className="eyebrow"><i /> LOCAL DEMO MODE</span><h1>Welcome back.</h1><p>Continue as Anuj and explore the complete learning experience.</p></div>
-        <form onSubmit={submit}>
-          <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" /></label>
-          <label>Password<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" /></label>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="button primary large full" type="submit">Enter learning space →</button>
-        </form>
-        <div className="demo-credentials"><b>Student demo</b><span>demo@student.com</span><span>Password: demo123</span></div>
-        <p className="privacy-note">Your demo preferences stay on this device. No medical or diagnostic data is collected.</p>
+      <button className="back-link" onClick={onBack}>← Back to welcome</button>
+      <section className="login-shell">
+        <aside className="login-brand-panel" aria-label="Padhai Yatra welcome">
+          <img src="/padhai-yatra-logo.png" alt="Padhai Yatra logo" />
+          <span>Grade 11 learning space</span>
+          <h1>Padhai Yatra</h1>
+          <p>Explain lessons, practice quizzes, plan study time, and keep your progress in one calm place.</p>
+        </aside>
+        <div className="login-card">
+          <Logo />
+          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : "Create account."}</h1><p>{mode === "login" ? "Your email and password must match a saved account on this device." : "Save your email and password for this local hackathon demo."}</p></div>
+          <div className="auth-tabs" role="group" aria-label="Login mode">
+            <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
+            <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Create account</button>
+          </div>
+          <form onSubmit={submit}>
+            {mode === "signup" && <label>Full name<input value={name} onChange={(e) => setName(e.target.value)} type="text" autoComplete="name" /></label>}
+            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" /></label>
+            <label>Password<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" /></label>
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <button className="button primary large full" type="submit">{mode === "login" ? "Log in →" : "Create and enter →"}</button>
+            <button className="button full" type="button" onClick={() => { setMode("login"); setEmail("demo@student.com"); setPassword("demo123"); setError(""); }}>Use demo account</button>
+          </form>
+          <div className="demo-credentials"><b>Demo login</b><span>demo@student.com</span><span>Password: demo123</span></div>
+          <p className="privacy-note">Demo accounts are remembered in this browser only. For real email OTP, connect a production auth provider later.</p>
+        </div>
       </section>
     </main>
   );
 }
 
-function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onProfile }: { title: string; calm: boolean; setCalm: (v: boolean) => void; theme: string; toggleTheme: () => void; onMenu: () => void; aiMode: "checking" | "live" | "demo"; onProfile: () => void }) {
+function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onProfile, currentUser }: { title: string; calm: boolean; setCalm: (v: boolean) => void; theme: string; toggleTheme: () => void; onMenu: () => void; aiMode: "checking" | "live" | "demo"; onProfile: () => void; currentUser: StudentAccount }) {
   return (
     <header className="app-header">
       <button className="icon-button mobile-menu" onClick={onMenu} aria-label="Open navigation">☰</button>
@@ -637,13 +697,13 @@ function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onPr
         <span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "checking" ? "Checking Padhai Yatra…" : aiMode === "live" ? "Padhai Yatra AI live" : "Padhai Yatra demo ready"}</span>
         <label className="calm-toggle"><input type="checkbox" checked={calm} onChange={(e) => setCalm(e.target.checked)} /><span className="switch" /><b>Calm mode</b></label>
         <button className="icon-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>{theme === "light" ? "☾" : "☀"}</button>
-        <button className="avatar profile-button" onClick={onProfile} aria-label="Open Anuj profile">A</button>
+        <button className="avatar profile-button" onClick={onProfile} aria-label={`Open ${currentUser.name} profile`}>{initialsFor(currentUser.name)}</button>
       </div>
     </header>
   );
 }
 
-function HistoryPanel({ open, onClose, quizAttempts, studySessions, setView }: { open: boolean; onClose: () => void; quizAttempts: QuizAttempt[]; studySessions: StudySession[]; setView: (view: View) => void }) {
+function HistoryPanel({ open, onClose, quizAttempts, studySessions, setView, currentUser }: { open: boolean; onClose: () => void; quizAttempts: QuizAttempt[]; studySessions: StudySession[]; setView: (view: View) => void; currentUser: StudentAccount }) {
   if (!open) return null;
   const totalQuizzes = quizAttempts.length;
   const averageScore = totalQuizzes ? Math.round((quizAttempts.reduce((sum, attempt) => sum + attempt.score / attempt.total, 0) / totalQuizzes) * 100) : 0;
@@ -653,7 +713,7 @@ function HistoryPanel({ open, onClose, quizAttempts, studySessions, setView }: {
       <button className="history-backdrop" onClick={onClose} aria-label="Close history" />
       <aside className="history-panel">
         <div className="history-head">
-          <div><span className="eyebrow"><i /> ANUJ HISTORY</span><h2>All activity</h2></div>
+          <div><span className="eyebrow"><i /> {currentUser.name.toUpperCase()} HISTORY</span><h2>All activity</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close history">×</button>
         </div>
         <div className="history-stats">
@@ -678,7 +738,7 @@ function HistoryPanel({ open, onClose, quizAttempts, studySessions, setView }: {
   );
 }
 
-function Sidebar({ view, setView, calm, open, close, logout }: { view: View; setView: (v: View) => void; calm: boolean; open: boolean; close: () => void; logout: () => void }) {
+function Sidebar({ view, setView, calm, open, close, logout, currentUser }: { view: View; setView: (v: View) => void; calm: boolean; open: boolean; close: () => void; logout: () => void; currentUser: StudentAccount }) {
   const visibleItems = calm ? navItems.filter((n) => ["dashboard", "learn", "assignments", "focus", "resources"].includes(n.id)) : navItems;
   const essentials = visibleItems.filter((n) => ["dashboard", "learn", "assignments", "quiz", "planner", "focus"].includes(n.id));
   const extras = visibleItems.filter((n) => !essentials.includes(n));
@@ -695,7 +755,7 @@ function Sidebar({ view, setView, calm, open, close, logout }: { view: View; set
       <div className="side-bottom">
         <button onClick={() => setView("settings")}><span>⚙</span>Settings</button>
         <button onClick={logout}><span>↪</span>Log out</button>
-        <button className={`profile-mini ${view === "profile" ? "active" : ""}`} onClick={() => { setView("profile"); close(); }} aria-label="Open Anuj profile"><div className="avatar">A</div><div><b>Anuj Adhikari</b><span>Student · Demo</span></div></button>
+        <button className={`profile-mini ${view === "profile" ? "active" : ""}`} onClick={() => { setView("profile"); close(); }} aria-label={`Open ${currentUser.name} profile`}><div className="avatar">{initialsFor(currentUser.name)}</div><div><b>{currentUser.name}</b><span>Student · Local account</span></div></button>
       </div>
     </aside>
   );
@@ -705,7 +765,7 @@ function StatCard({ label, value, note, icon }: { label: string; value: string; 
   return <article className="stat-card"><div className="stat-icon">{icon}</div><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
 }
 
-function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }: { setView: (v: View) => void; lessonInput: string; setLessonInput: (v: string) => void; adapt: () => void; lessonResult: LessonResult | null }) {
+function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult, currentUser }: { setView: (v: View) => void; lessonInput: string; setLessonInput: (v: string) => void; adapt: () => void; lessonResult: LessonResult | null; currentUser: StudentAccount }) {
   const topic = getLessonTopic(lessonInput, lessonResult);
   const choices: [View, string, string, string, string][] = [
     ["learn", "1", "Help me understand", "Paste a lesson and get a clearer explanation.", "mint"],
@@ -715,7 +775,7 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }
   ];
   return (
     <div className="page-content dashboard-page">
-      <section className="welcome-row simple-welcome"><div><p className="date-label">YOUR LEARNING SPACE</p><h2>Hi Anuj, what can we make easier? <span>👋</span></h2><p>Choose one thing. Padhai Yatra will guide you step by step.</p></div><button className="streak-pill" onClick={() => setView("progress")}><span>◇</span><div><b>5 day streak</b><small>See your progress →</small></div></button></section>
+      <section className="welcome-row simple-welcome"><div><p className="date-label">YOUR LEARNING SPACE</p><h2>Hi {currentUser.name.split(" ")[0] || "Student"}, what can we make easier? <span>👋</span></h2><p>Choose one thing. Padhai Yatra will guide you step by step.</p></div><button className="streak-pill" onClick={() => setView("progress")}><span>◇</span><div><b>5 day streak</b><small>See your progress →</small></div></button></section>
 
       <section className="start-guide calm-hide" aria-label="Three simple steps">
         <div><b>1</b><span><strong>Choose a goal</strong><small>Pick one card below</small></span></div>
@@ -733,6 +793,7 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }
           </div>
           <div className="secondary-actions calm-hide">
             <button onClick={() => setView("planner")}><span>▦</span><b>Make a study plan</b></button>
+            <button onClick={() => setView("studyroom")}><span>☷</span><b>Study with friends</b></button>
             <button onClick={() => setView("communicate")}><span>◌</span><b>Help me ask a teacher</b></button>
             <button onClick={() => setView("resources")}><span>▣</span><b>Open My Books</b></button>
           </div>
@@ -975,6 +1036,66 @@ function CommunicatePage() {
   return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> HELP ME COMMUNICATE</span><h2>Find the words for what you need.</h2><p>Choose what fits right now. Padhai Yatra will help you create a respectful message for a teacher.</p></section><section className="communication-grid"><div className="choice-list">{choices.map((item) => <button className={choice === item.label ? "active" : ""} onClick={() => setChoice(item.label)} key={item.label}><span>{item.icon}</span>{item.label}<i>→</i></button>)}</div><article className="message-card"><span className="eyebrow"><i /> SUGGESTED MESSAGE</span><h3>{choice}</h3><blockquote>“{message}”</blockquote><div className="tone-row">{["Short", "Clear", "Formal"].map((t) => <button className={tone === t ? "active" : ""} onClick={() => setTone(t as "Short" | "Clear" | "Formal")} key={t}>{t === "Short" ? "Make shorter" : t === "Formal" ? "Make more formal" : "Make simpler"}</button>)}</div><button className="button primary" onClick={async () => { await navigator.clipboard?.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied ✓" : "Copy message"}</button></article></section></div>;
 }
 
+function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUser: StudentAccount; setView: (view: View) => void; setLessonInput: (value: string) => void }) {
+  const [topic, setTopic] = useState("Accounting basics");
+  const [friendEmail, setFriendEmail] = useState("");
+  const [friends, setFriends] = useState<string[]>(() => readStoredJson("padhai-yatra-study-friends-v1", []));
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<{ from: string; text: string; time: string }[]>(() => readStoredJson("padhai-yatra-study-messages-v1", [
+    { from: "Padhai Yatra", text: "Create a topic, invite friends, then start a group quiz together.", time: new Date().toISOString() },
+  ]));
+  const inviteLink = `https://github.com/anujyolo/Mero-Basket?study=${encodeURIComponent(topic || "study-room")}`;
+  useEffect(() => { localStorage.setItem("padhai-yatra-study-friends-v1", JSON.stringify(friends)); }, [friends]);
+  useEffect(() => { localStorage.setItem("padhai-yatra-study-messages-v1", JSON.stringify(messages)); }, [messages]);
+  const invite = () => {
+    const clean = friendEmail.trim().toLowerCase();
+    if (!clean.includes("@")) return;
+    setFriends((current) => current.includes(clean) ? current : [clean, ...current].slice(0, 12));
+    setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to study "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
+    setFriendEmail("");
+  };
+  const send = () => {
+    if (!message.trim()) return;
+    setMessages((current) => [{ from: currentUser.name, text: message.trim(), time: new Date().toISOString() }, ...current].slice(0, 20));
+    setMessage("");
+  };
+  const startQuiz = () => {
+    setLessonInput(topic.trim() || "Grade 11 study topic");
+    setView("quiz");
+  };
+  return (
+    <div className="page-content work-page">
+      <section className="page-intro">
+        <span className="eyebrow"><i /> STUDY TOGETHER</span>
+        <h2>Invite friends and learn as a group.</h2>
+        <p>Create a shared study topic, invite classmates, chat about what to cover, and jump into a quiz together.</p>
+      </section>
+      <section className="study-room-grid">
+        <article className="study-room-card main">
+          <span className="eyebrow"><i /> ROOM SETUP</span>
+          <label>Study topic<input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Accounting basics, demand curve, chemistry..." /></label>
+          <label>Invite friend by email<div className="inline-form"><input value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} type="email" placeholder="friend@email.com" /><button className="button primary" type="button" onClick={invite}>Invite</button></div></label>
+          <div className="invite-link-box"><span>Share link</span><code>{inviteLink}</code><button className="button" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Copy link</button></div>
+          <div className="room-actions"><button className="button primary large" onClick={startQuiz}>Start group quiz →</button><button className="button large" onClick={() => setView("focus")}>Start focus session</button></div>
+        </article>
+        <article className="study-room-card">
+          <span className="eyebrow"><i /> FRIENDS</span>
+          <div className="friend-list">
+            {friends.length ? friends.map((friend) => <div key={friend}><span className="avatar">{friend[0]?.toUpperCase()}</span><b>{friend}</b><small>Invited</small></div>) : <p>No friends invited yet. Add an email to prepare the study group.</p>}
+          </div>
+        </article>
+        <article className="study-room-card chat">
+          <span className="eyebrow"><i /> GROUP CONVERSATION</span>
+          <div className="inline-form"><input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write a study message..." /><button className="button primary" onClick={send}>Send</button></div>
+          <div className="message-list">
+            {messages.map((item, index) => <div key={`${item.time}-${index}`}><b>{item.from}</b><p>{item.text}</p><small>{new Date(item.time).toLocaleTimeString()}</small></div>)}
+          </div>
+        </article>
+      </section>
+    </div>
+  );
+}
+
 function formatDuration(seconds: number) {
   const minutes = Math.round(seconds / 60);
   const hours = Math.floor(minutes / 60);
@@ -1151,17 +1272,17 @@ function PreferencesPage({ preferences, setPreferences }: { preferences: Prefere
   return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> MY LEARNING STYLE</span><h2>Choose what helps you learn.</h2><p>No medical questions. No labels. You can change these preferences at any time.</p></section><section className="preferences-form"><fieldset><legend>How do you prefer explanations?</legend><div className="segmented">{["Short & Simple", "Normal", "Detailed"].map((x) => <label className={preferences.explanation === x ? "selected" : ""} key={x}><input type="radio" name="explanation" checked={preferences.explanation === x} onChange={() => update("explanation", x as Preferences["explanation"])} />{x}</label>)}</div></fieldset><fieldset><legend>Which learning tools help you?</legend><div className="check-grid">{tools.map((tool) => <label className={preferences.tools.includes(tool) ? "selected" : ""} key={tool}><input type="checkbox" checked={preferences.tools.includes(tool)} onChange={() => update("tools", preferences.tools.includes(tool) ? preferences.tools.filter((t) => t !== tool) : [...preferences.tools, tool])} /><span>✓</span>{tool}</label>)}</div></fieldset><fieldset><legend>Study interface</legend><div className="segmented">{["Normal", "Low distraction", "One task at a time"].map((x) => <label className={preferences.interface === x ? "selected" : ""} key={x}><input type="radio" name="interface" checked={preferences.interface === x} onChange={() => update("interface", x as Preferences["interface"])} />{x}</label>)}</div></fieldset><fieldset><legend>Preferred study session</legend><div className="segmented compact">{[10, 15, 20, 25, 30].map((n) => <label className={preferences.session === n ? "selected" : ""} key={n}><input type="radio" name="session" checked={preferences.session === n} onChange={() => update("session", n)} />{n} min</label>)}</div></fieldset><fieldset><legend>Do you prefer predictable task sequences?</legend><div className="segmented compact"><label className={preferences.predictable ? "selected" : ""}><input type="radio" name="predictable" checked={preferences.predictable} onChange={() => update("predictable", true)} />Yes</label><label className={!preferences.predictable ? "selected" : ""}><input type="radio" name="predictable" checked={!preferences.predictable} onChange={() => update("predictable", false)} />No</label></div></fieldset><div className="saved-note"><span>✓</span><div><b>Preferences saved automatically</b><small>Every demo AI response will use these choices.</small></div></div></section></div>;
 }
 
-function ProfilePage({ preferences, quizAttempts, studySessions, setView, openHistory }: { preferences: Preferences; quizAttempts: QuizAttempt[]; studySessions: StudySession[]; setView: (view: View) => void; openHistory: () => void }) {
+function ProfilePage({ currentUser, preferences, quizAttempts, studySessions, setView, openHistory }: { currentUser: StudentAccount; preferences: Preferences; quizAttempts: QuizAttempt[]; studySessions: StudySession[]; setView: (view: View) => void; openHistory: () => void }) {
   const totalStudySeconds = studySessions.reduce((sum, session) => sum + session.durationSeconds, 0);
   const averageScore = quizAttempts.length ? Math.round((quizAttempts.reduce((sum, attempt) => sum + attempt.score / attempt.total, 0) / quizAttempts.length) * 100) : 0;
   return (
     <div className="page-content work-page">
       <section className="profile-hero">
-        <div className="profile-avatar-large">A</div>
+        <div className="profile-avatar-large">{initialsFor(currentUser.name)}</div>
         <div>
           <span className="eyebrow"><i /> MY PROFILE</span>
-          <h2>Anuj Adhikari</h2>
-          <p>Student · Demo account · Grade 11 focus</p>
+          <h2>{currentUser.name}</h2>
+          <p>{currentUser.email} · Grade 11 focus</p>
         </div>
         <button className="button primary" onClick={openHistory}>View full history</button>
       </section>
@@ -1199,6 +1320,7 @@ function SettingsPage({ theme, toggleTheme, calm, setCalm, aiMode }: { theme: st
 export default function Home() {
   const [screen, setScreen] = useState<"landing" | "login" | "app">("landing");
   const [view, setView] = useState<View>("dashboard");
+  const [currentUser, setCurrentUser] = useState<StudentAccount>(() => readStoredJson<StudentAccount>(CURRENT_USER_KEY, { name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() }));
   const [theme, setTheme] = useState("light");
   const [calm, setCalm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1249,8 +1371,13 @@ export default function Home() {
   const recordQuizAttempt = useCallback((attempt: QuizAttempt) => {
     setQuizAttempts((current) => current.some((item) => item.id === attempt.id) ? current : [attempt, ...current].slice(0, 100));
   }, []);
-  function login() { setScreen("app"); setView("dashboard"); }
-  function quickDemo() { login(); }
+  function login(account: StudentAccount) {
+    setCurrentUser(account);
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
+    setScreen("app");
+    setView("dashboard");
+  }
+  function quickDemo() { login({ name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() }); }
   async function runLearningAction(action: string) {
     const normalizedLesson = lessonInput.trim();
     if (!normalizedLesson) return;
@@ -1291,11 +1418,11 @@ export default function Home() {
 
   return (
     <div className={`app-shell ${calm ? "calm" : ""}`}>
-      <Sidebar view={view} setView={setView} calm={calm} open={menuOpen} close={() => setMenuOpen(false)} logout={() => setScreen("landing")} />
+      <Sidebar view={view} setView={setView} calm={calm} open={menuOpen} close={() => setMenuOpen(false)} logout={() => setScreen("landing")} currentUser={currentUser} />
       {menuOpen && <button className="nav-overlay" onClick={() => setMenuOpen(false)} aria-label="Close navigation overlay" />}
       <div className="app-main">
-        <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} onProfile={() => setView("profile")} />
-        {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardLearningAction} lessonResult={lessonResult} />}
+        <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} onProfile={() => setView("profile")} currentUser={currentUser} />
+        {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardLearningAction} lessonResult={lessonResult} currentUser={currentUser} />}
         {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} lessonAnalysis={lessonAnalysis} loading={loading} stage={stage} runAction={runLearningAction} showQuiz={showQuiz} setShowQuiz={setShowQuiz} onQuizComplete={recordQuizAttempt} />}
         {view === "assignments" && <AssignmentsPage calm={calm} />}
         {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runLearningAction("Explain deeply")} onComplete={recordQuizAttempt} /></div>}
@@ -1304,14 +1431,15 @@ export default function Home() {
         {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} onSessionComplete={recordStudySession} />}
         {view === "routine" && <RoutinePage />}
         {view === "communicate" && <CommunicatePage />}
+        {view === "studyroom" && <StudyTogetherPage currentUser={currentUser} setView={setView} setLessonInput={setLessonInput} />}
         {view === "progress" && <ProgressPage sessions={studySessions} />}
         {view === "resources" && <ResourcesPage setLessonInput={setLessonInput} setView={setView} />}
         {view === "preferences" && <PreferencesPage preferences={preferences} setPreferences={setPreferences} />}
-        {view === "profile" && <ProfilePage preferences={preferences} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} openHistory={() => setHistoryOpen(true)} />}
+        {view === "profile" && <ProfilePage currentUser={currentUser} preferences={preferences} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} openHistory={() => setHistoryOpen(true)} />}
         {view === "settings" && <SettingsPage theme={theme} toggleTheme={toggleTheme} calm={calm} setCalm={setCalm} aiMode={aiMode} />}
       </div>
       <AdaptHelper open={helperOpen} setOpen={setHelperOpen} setView={setView} />
-      <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} />
+      <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} currentUser={currentUser} />
     </div>
   );
 }
