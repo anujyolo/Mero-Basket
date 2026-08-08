@@ -319,6 +319,22 @@ function attachSourceInfo(result: LessonResult, textbookContext: TextbookContext
   };
 }
 
+const emptyTextbookContext: TextbookContext = {
+  subjectHint: null,
+  mode: "GENERAL",
+  sources: [],
+  searchTerms: [],
+};
+
+async function getSafeBookSearchContext(content: string) {
+  try {
+    return await getBookSearchContext(content);
+  } catch (error) {
+    console.warn("Textbook search failed; continuing with local lesson support.", error);
+    return emptyTextbookContext;
+  }
+}
+
 function getPhotosynthesisAnalysis() {
   return {
     mainTopic: "Photosynthesis",
@@ -367,10 +383,11 @@ export async function POST(request: NextRequest) {
 
     const action = body.action || "Simplify";
     const apiKey = process.env.OPENAI_API_KEY;
-    const textbookContext = await getBookSearchContext(content);
+    const textbookContext = await getSafeBookSearchContext(content);
 
     if (apiKey) {
-      const preferenceText = [
+      try {
+        const preferenceText = [
         `Explanation depth: ${body.preferences?.explanation || "Normal"}`,
         `Helpful tools: ${(body.preferences?.tools || []).join(", ") || "Examples and key points"}`,
         `Interface preference: ${body.preferences?.interface || "Normal"}`,
@@ -378,7 +395,7 @@ export async function POST(request: NextRequest) {
       const textbookText = textbookContext.sources.length
         ? `\nTextbook excerpts you should use first:\n${textbookContext.sources.map((source, index) => `${index + 1}. ${source.subject} — ${source.title}, ${source.pages}\n${source.excerpt}`).join("\n\n")}\n`
         : "\nNo relevant textbook excerpt was found. If you answer generally, say that it is not directly from the uploaded textbook.\n";
-      const developerPrompt = `You are Adapt, a precise and encouraging educational assistant for students of different ages and learning preferences.
+        const developerPrompt = `You are Adapt, a precise and encouraging educational assistant for students of different ages and learning preferences.
 
 Adapt the supplied educational material without removing facts or changing its educational meaning. Use age-neutral, respectful language. Never diagnose autism, ADHD, dyslexia, a learning disability, intelligence, or any medical or psychological condition. Never infer a condition from preferences, answers, or scores. Do not use guilt, shame, or infantilizing language.
 
@@ -407,7 +424,7 @@ Return only one JSON object with this exact shape:
   ]
 }`;
 
-      const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
+        const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -456,20 +473,23 @@ Return only one JSON object with this exact shape:
         }),
       });
 
-      if (openAIResponse.ok) {
-        const openAIData = await openAIResponse.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
-        const outputText = openAIData.output_text || openAIData.output?.flatMap((item) => item.content || []).map((item) => item.text || "").join("");
-        if (outputText) {
-          const analysis = JSON.parse(outputText) as LessonAnalysis;
-          return NextResponse.json({
-            mode: "LIVE_AI",
-            preferencesApplied: body.preferences,
-            textbookMode: textbookContext.mode,
-            textbookSources: textbookContext.sources,
-            analysis,
-            result: attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext),
-          });
+        if (openAIResponse.ok) {
+          const openAIData = await openAIResponse.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
+          const outputText = openAIData.output_text || openAIData.output?.flatMap((item) => item.content || []).map((item) => item.text || "").join("");
+          if (outputText) {
+            const analysis = JSON.parse(outputText) as LessonAnalysis;
+            return NextResponse.json({
+              mode: "LIVE_AI",
+              preferencesApplied: body.preferences,
+              textbookMode: textbookContext.mode,
+              textbookSources: textbookContext.sources,
+              analysis,
+              result: attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext),
+            });
+          }
         }
+      } catch (error) {
+        console.warn("Live AI failed; continuing with textbook/local fallback.", error);
       }
     }
 

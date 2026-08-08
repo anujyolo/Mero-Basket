@@ -226,8 +226,12 @@ async function buildBookIndex() {
       const index: IndexedBook[] = [];
       for (const book of catalog) {
         if (!existsSync(book.filePath)) continue;
-        const pages = await extractPdfPages(book.filePath);
-        index.push({ id: book.id, subject: book.subject, title: book.title, filePath: book.filePath, pages });
+        try {
+          const pages = await extractPdfPages(book.filePath);
+          index.push({ id: book.id, subject: book.subject, title: book.title, filePath: book.filePath, pages });
+        } catch (error) {
+          console.warn(`Skipping textbook index for ${book.subject}:`, error);
+        }
       }
       cachedSignature = signature;
       cachedBooks = index;

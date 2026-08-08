@@ -199,6 +199,8 @@ function getLessonTopic(lessonInput: string, result?: LessonResult | null) {
   const title = cleanText(result?.title || "");
   if (title && title !== "your lesson" && title !== "Your adapted lesson") return title;
   const firstLine = cleanText(lessonInput).split(/[.!?]/)[0];
+  const contextMatch = firstLine.match(/^(?:in|about|for)\s+([A-Za-z][A-Za-z-]{2,30})\b/i);
+  if (contextMatch?.[1]) return contextMatch[1][0].toUpperCase() + contextMatch[1].slice(1);
   const words = firstLine.split(" ").filter(Boolean);
   return words.slice(0, Math.min(words.length, 5)).join(" ") || "your lesson";
 }
@@ -265,6 +267,54 @@ function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
   } satisfies LessonResult;
 }
 
+function buildEmergencyAnalysis(lessonInput: string): LessonAnalysis {
+  const topic = getLessonTopic(lessonInput).replace(/^(in|about|for)\s+/i, "");
+  const cleanTopic = topic || "your lesson";
+  const material = cleanText(lessonInput, cleanTopic);
+  const firstSentence = material.split(/(?<=[.!?])\s+/)[0] || material;
+  const words = material.toLowerCase().match(/[a-z][a-z0-9-]{3,}/g) || [];
+  const keyPoints = [...new Set(words.filter((word) => !["about", "answer", "chapter", "explain", "lesson", "question", "that", "this", "with", "your"].includes(word)).slice(0, 6))]
+    .map((word) => word[0].toUpperCase() + word.slice(1));
+  const points = keyPoints.length >= 3 ? keyPoints : ["Main idea", "Important details", "Useful example"];
+
+  return {
+    mainTopic: cleanTopic,
+    summary: `${cleanTopic} is the topic to study. Start with the main idea, then connect the important details from your material.`,
+    simpleExplanation: `In simple words: ${firstSentence}`,
+    keyPoints: points,
+    examples: [
+      `A useful way to learn ${cleanTopic} is to explain it to a friend in two short sentences.`,
+      `Connect ${cleanTopic} to one example from your class notes or textbook.`,
+    ],
+    learningSteps: [
+      `Read the material about ${cleanTopic} once.`,
+      `Write the main idea in one short sentence.`,
+      `Pick out these key points: ${points.slice(0, 4).join(", ")}.`,
+      `Practice one question or example.`,
+    ],
+    quiz: [
+      {
+        question: `What should you understand first about ${cleanTopic}?`,
+        options: ["The main idea", "Only the page number", "An unrelated fact"],
+        answer: 0,
+        explanation: "The main idea helps organize the rest of the lesson.",
+      },
+      {
+        question: `Which item is most useful for reviewing ${cleanTopic}?`,
+        options: [points[0] || "A key point", "A random word", "Only the title"],
+        answer: 0,
+        explanation: "Important key points make review faster and clearer.",
+      },
+      {
+        question: "How can you check if you understand?",
+        options: ["Explain it in your own words", "Skip practice", "Memorize without meaning"],
+        answer: 0,
+        explanation: "Explaining in your own words shows real understanding.",
+      },
+    ],
+  };
+}
+
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="logo" aria-label="AdaptEd AI home">
@@ -310,7 +360,7 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
             <span className="paper-label">ORIGINAL LESSON</span>
             <p>Evaporation is the process by which molecules in a liquid state acquire sufficient kinetic energy to transition into the gaseous state.</p>
           </div>
-          <div className="adapt-bridge"><span>✦</span> Adapted for Alex</div>
+          <div className="adapt-bridge"><span>✦</span> Demo adapted lesson</div>
           <div className="paper adapted-paper">
             <span className="paper-label">SHORT + EXAMPLE</span>
             <h3>Evaporation means liquid turns into gas.</h3>
@@ -518,11 +568,12 @@ function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview }: { les
     return makeQuiz(lessonInput, lessonResult);
   }, [lessonAnalysis, lessonInput, lessonResult]);
   const score = quiz.questions.reduce((n, q, i) => n + (answers[i] === q.answer ? 1 : 0), 0);
+  const perfectScore = score === quiz.questions.length;
   return (
     <section className="quiz-card">
       <div className="card-title"><div><span className="eyebrow"><i /> 3 QUESTION CHECK</span><h2>{quiz.title}</h2></div><span className="preference-chip">No time limit</span></div>
       {quiz.questions.map((q, i) => <fieldset key={q.question} className="question"><legend><span>{i + 1}</span>{q.question}</legend>{q.options.map((option, oi) => <label className={`${submitted ? oi === q.answer ? "correct" : answers[i] === oi ? "incorrect" : "" : ""}`} key={option}><input type="radio" name={`q-${i}`} checked={answers[i] === oi} onChange={() => !submitted && setAnswers((a) => ({ ...a, [i]: oi }))} />{option}{submitted && oi === q.answer && <b>Correct</b>}</label>)}{submitted && <p className="explanation">{q.explanation}</p>}</fieldset>)}
-      {!submitted ? <button className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={() => setSubmitted(true)}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{score === quiz.questions.length ? "Strong work. You understand the main idea." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>Main idea · Check</b><b>{quiz.review} · Review</b></div><button className="button primary" onClick={onReview}>Review weak area →</button><button className="button" onClick={() => { setAnswers({}); setSubmitted(false); }}>Try again</button></div>}
+      {!submitted ? <button className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={() => setSubmitted(true)}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{perfectScore ? "🎉 Great work! You answered all questions correctly. No weak area was detected in this quiz." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>Main idea · Check</b>{perfectScore ? <b>No weak area detected</b> : <b>{quiz.review} · Review</b>}</div>{!perfectScore && <button className="button primary" onClick={onReview}>Review weak area →</button>}<button className="button primary" onClick={() => { setAnswers({}); setSubmitted(false); }}>{perfectScore ? "Practice harder questions" : "Try again"}</button><button className="button" onClick={onReview}>{perfectScore ? "Review key points" : "Explain differently"}</button></div>}
     </section>
   );
 }
@@ -632,12 +683,23 @@ function RoutinePage() {
 }
 
 function CommunicatePage() {
-  const choices = ["I don’t understand", "Please explain differently", "Please go slower", "I need a break", "It is difficult to focus right now", "I need help"];
-  const [choice, setChoice] = useState(choices[0]);
-  const [tone, setTone] = useState("Clear");
+  const choices = [
+    { label: "I don’t understand", icon: "😕", short: "I’m stuck. Can you explain this another way?", clear: "I’m having trouble understanding this part. Could you explain it another way with an example?", formal: "I am having difficulty understanding this part. Would you please explain it again using a clear example?" },
+    { label: "Please explain differently", icon: "🔁", short: "Can you explain it differently?", clear: "The first explanation did not click for me. Could you explain it in a different way?", formal: "The current explanation is not clear to me yet. Would you please explain it using a different approach?" },
+    { label: "Please go slower", icon: "🐢", short: "Can we go slower?", clear: "Could we go through this more slowly, one step at a time?", formal: "Would it be possible to go through this more slowly and step by step?" },
+    { label: "I need help with this question", icon: "❓", short: "Can you help me with this question?", clear: "I tried this question, but I’m not sure what to do next. Could you guide me through the first step?", formal: "I attempted this question, but I am unsure how to continue. Would you please help me with the first step?" },
+    { label: "I need a short break", icon: "⏸", short: "Can I take a short break?", clear: "I need a short break so I can come back and focus better.", formal: "May I take a short break and then continue the task?" },
+    { label: "It’s hard to focus right now", icon: "◌", short: "I’m finding it hard to focus.", clear: "I’m finding it hard to focus right now. Could you help me choose one small thing to start with?", formal: "I am finding it difficult to focus right now. Would you please help me identify one manageable first step?" },
+    { label: "This task feels too big", icon: "▦", short: "This task feels too big.", clear: "This task feels too big right now. Could you help me break it into smaller steps?", formal: "This task feels overwhelming to me. Would you please help me divide it into smaller steps?" },
+    { label: "I don’t know where to start", icon: "▶", short: "I don’t know where to start.", clear: "I don’t know where to start. Could you tell me the first step I should do?", formal: "I am unsure where to begin. Would you please tell me the first step I should complete?" },
+    { label: "I’m feeling overwhelmed", icon: "🌿", short: "I’m overwhelmed. I need a smaller step.", clear: "I’m feeling overwhelmed. Could we make this into one small next step?", formal: "I am feeling overwhelmed. Would you please help me focus on one small next step?" },
+  ];
+  const [choice, setChoice] = useState(choices[0].label);
+  const [tone, setTone] = useState<"Short" | "Clear" | "Formal">("Clear");
   const [copied, setCopied] = useState(false);
-  const message = tone === "Short" ? "I’m confused about the second step. Could you explain it with an example?" : tone === "Formal" ? "I understand the first part, but I am having difficulty with the second step. Would you please explain it again using an example?" : "I understand the first part, but I’m confused about the second step. Could you explain it again using an example?";
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> HELP ME COMMUNICATE</span><h2>Find the words for what you need.</h2><p>Choose what fits right now. Adapt will help you create a respectful message for a teacher.</p></section><section className="communication-grid"><div className="choice-list">{choices.map((c, i) => <button className={choice === c ? "active" : ""} onClick={() => setChoice(c)} key={c}><span>{["😕", "🔁", "🐢", "⏸", "◌", "🙋"][i]}</span>{c}<i>→</i></button>)}</div><article className="message-card"><span className="eyebrow"><i /> SUGGESTED MESSAGE</span><h3>{choice}</h3><blockquote>“{message}”</blockquote><div className="tone-row">{["Short", "Clear", "Formal"].map((t) => <button className={tone === t ? "active" : ""} onClick={() => setTone(t)} key={t}>{t}</button>)}</div><button className="button primary" onClick={async () => { await navigator.clipboard?.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied ✓" : "Copy message"}</button></article></section></div>;
+  const selected = choices.find((item) => item.label === choice) || choices[0];
+  const message = tone === "Short" ? selected.short : tone === "Formal" ? selected.formal : selected.clear;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> HELP ME COMMUNICATE</span><h2>Find the words for what you need.</h2><p>Choose what fits right now. Adapt will help you create a respectful message for a teacher.</p></section><section className="communication-grid"><div className="choice-list">{choices.map((item) => <button className={choice === item.label ? "active" : ""} onClick={() => setChoice(item.label)} key={item.label}><span>{item.icon}</span>{item.label}<i>→</i></button>)}</div><article className="message-card"><span className="eyebrow"><i /> SUGGESTED MESSAGE</span><h3>{choice}</h3><blockquote>“{message}”</blockquote><div className="tone-row">{["Short", "Clear", "Formal"].map((t) => <button className={tone === t ? "active" : ""} onClick={() => setTone(t as "Short" | "Clear" | "Formal")} key={t}>{t === "Short" ? "Make shorter" : t === "Formal" ? "Make more formal" : "Make simpler"}</button>)}</div><button className="button primary" onClick={async () => { await navigator.clipboard?.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied ✓" : "Copy message"}</button></article></section></div>;
 }
 
 function ProgressPage() {
@@ -856,8 +918,14 @@ export default function Home() {
         }
       }
     } catch {
-      setLessonAnalysis(null);
-      setLessonResult({ title: "Let’s try that again", summary: "Adapt could not prepare this explanation yet.", needs: [], steps: [], result: "Your original material is still safe.", example: "Check your connection and try again." });
+      const fallbackAnalysis = buildEmergencyAnalysis(normalizedLesson);
+      setLessonAnalysis(fallbackAnalysis);
+      setLessonResult({
+        ...buildResultFromAnalysis(fallbackAnalysis, action),
+        sourceMode: "GENERAL",
+        sourceNote: "Offline backup explanation — no extra AI credit used",
+        sources: [],
+      });
     } finally { window.clearInterval(stages); setStage(2); setLoading(false); }
   }
   const dashboardAdapt = () => runAdapt("Simplify");
