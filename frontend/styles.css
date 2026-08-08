@@ -438,6 +438,13 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .settings-card small { color: var(--muted); }
 .safety-card { margin-top: 18px; padding: 22px; border-radius: var(--radius); background: var(--accent-2); border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line)); }
 .safety-card p { color: var(--muted); margin-bottom: 0; }
+.resource-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 18px; }
+.resource-card { min-height: 230px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); display: grid; align-content: space-between; gap: 18px; box-shadow: 0 12px 35px rgba(31, 52, 43, 0.05); }
+.resource-card span { width: max-content; padding: 6px 10px; border-radius: 999px; background: var(--accent-2); color: var(--accent-dark); font-size: 10px; font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
+.resource-card h3 { margin: 15px 0 7px; font-size: 22px; letter-spacing: -.03em; }
+.resource-card p { margin: 0; color: var(--muted); font-size: 13px; }
+.resource-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.resource-actions a { text-decoration: none; }
 
 /* Calm mode */
 .app-shell.calm { --radius: 26px; }
@@ -516,6 +523,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
   .preference-chip { display: inline-block; margin-top: 10px; }
   .needs-grid { grid-template-columns: 1fr; }
   .planner-grid, .routine-layout, .communication-grid, .progress-layout { grid-template-columns: 1fr; }
+  .resource-grid { grid-template-columns: 1fr; }
   .flashcard { aspect-ratio: auto; min-height: 350px; padding: 30px; }
   .flashcard h2 { font-size: 30px; }
   .flash-actions { flex-wrap: wrap; }

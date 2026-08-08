@@ -17,6 +17,7 @@ type View =
   | "routine"
   | "communicate"
   | "progress"
+  | "resources"
   | "preferences"
   | "settings";
 
@@ -115,6 +116,7 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "routine", label: "Routine", icon: "◷" },
   { id: "communicate", label: "Ask for help", icon: "◌" },
   { id: "progress", label: "Progress", icon: "↗" },
+  { id: "resources", label: "Grade 11 books", icon: "▣" },
   { id: "preferences", label: "Learning style", icon: "⚙" },
 ];
 
@@ -156,6 +158,19 @@ const flashcards = [
   { front: "What does chlorophyll do?", back: "It captures light energy in the leaves." },
   { front: "What are the inputs?", back: "Sunlight, water, and carbon dioxide." },
   { front: "What are the outputs?", back: "Glucose and oxygen." },
+];
+
+const grade11Materials = [
+  { subject: "Mathematics", title: "Class 11 Mathematics", kind: "Included PDF", href: "/study_materials/03_Mathematics_Class_11.pdf" },
+  { subject: "Biology", title: "Class 11 Biology", kind: "Included PDF", href: "/study_materials/04_Biology_Class_11.pdf" },
+  { subject: "Computer Science", title: "Computer Science XI", kind: "Online source", href: "https://fliphtml5.com/lgnrq/tsqa/Computer_Science_XI/" },
+  { subject: "Nepali", title: "Class 11 Nepali", kind: "Online source", href: "https://online.fliphtml5.com/gcbzg/hggo/#p=10" },
+  { subject: "Physics", title: "Physics table of contents", kind: "Publisher source", href: "https://buddhapublication.com/books/table_of_content/78959854.pdf" },
+  { subject: "Chemistry", title: "NCERT Chemistry Chapter 1", kind: "Official PDF", href: "https://ncert.nic.in/textbook/pdf/kech101.pdf" },
+  { subject: "Law", title: "Law XII reference", kind: "Online source", href: "https://www.scribd.com/document/544136733/Law-xii" },
+  { subject: "Social Studies", title: "Samajik / Social Studies", kind: "Online source", href: "https://online.anyflip.com/qfwek/ceqm/mobile/index.html" },
+  { subject: "Economics", title: "Economics", kind: "Online source", href: "https://online.anyflip.com/qfwek/dtwq/mobile/index.html" },
+  { subject: "Business Studies", title: "Business Studies 11 Nepali", kind: "Publisher source", href: "https://asmitapublication.com/product/277/business-studies-11-nepali/10-2" },
 ];
 
 function cleanText(value: string, fallback = "your lesson") {
@@ -369,7 +384,7 @@ function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode }: { 
 }
 
 function Sidebar({ view, setView, calm, open, close, logout }: { view: View; setView: (v: View) => void; calm: boolean; open: boolean; close: () => void; logout: () => void }) {
-  const visibleItems = calm ? navItems.filter((n) => ["dashboard", "learn", "assignments", "focus"].includes(n.id)) : navItems;
+  const visibleItems = calm ? navItems.filter((n) => ["dashboard", "learn", "assignments", "focus", "resources"].includes(n.id)) : navItems;
   const essentials = visibleItems.filter((n) => ["dashboard", "learn", "assignments", "quiz", "planner", "focus"].includes(n.id));
   const extras = visibleItems.filter((n) => !essentials.includes(n));
   const navButton = (item: (typeof navItems)[number]) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => { setView(item.id); close(); }}><span>{item.icon}</span>{item.label}</button>;
@@ -424,7 +439,7 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }
           <div className="secondary-actions calm-hide">
             <button onClick={() => setView("planner")}><span>▦</span><b>Make a study plan</b></button>
             <button onClick={() => setView("communicate")}><span>◌</span><b>Help me ask a teacher</b></button>
-            <button onClick={() => setView("flashcards")}><span>▤</span><b>Review flashcards</b></button>
+            <button onClick={() => setView("resources")}><span>▣</span><b>Open Grade 11 books</b></button>
           </div>
         </div>
 
@@ -611,6 +626,14 @@ function ProgressPage() {
   return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> LEARNING PROGRESS</span><h2>Your progress, without pressure.</h2><p>These indicators show what to study next. They are not medical or psychological assessments.</p></section><section className="stats-grid"><StatCard label="Topics studied" value="24" note="6 this week" icon="▤" /><StatCard label="Study time" value="6h 45m" note="Steady progress" icon="◷" /><StatCard label="Quizzes completed" value="14" note="Average 78%" icon="⚡" /><StatCard label="Tasks completed" value="38" note="8 this week" icon="✓" /></section><section className="progress-layout"><article className="topic-progress"><div className="card-title"><div><span className="eyebrow"><i /> RECENT TOPICS</span><h2>What to review next</h2></div></div>{topics.map((t) => <div key={t[0]}><span><b>{t[0]}</b><small>{t[2]}</small></span><strong>{t[1]}</strong><i><em style={{ width: t[1] }} /></i></div>)}</article><article className="week-card"><span>THIS WEEK</span><h3>2h 35m</h3><div className="bars">{[35, 60, 42, 78, 55, 88, 30].map((h, i) => <i style={{ height: `${h}%` }} key={i}><small>{["S", "M", "T", "W", "T", "F", "S"][i]}</small></i>)}</div><p>Friday was your most focused day.</p></article></section></div>;
 }
 
+function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string) => void; setView: (v: View) => void }) {
+  function handleMaterial(subject: string, title: string) {
+    setLessonInput(`Grade 11 ${subject}: ${title}. Paste a topic, paragraph, or homework question from this book and AdaptEd will explain it for a Grade 11 student.`);
+    setView("learn");
+  }
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> GRADE 11 LIBRARY</span><h2>Books connected to AdaptEd.</h2><p>Open a source, choose a subject, then paste a small topic or paragraph into AdaptEd for explanation, quiz, or homework help.</p></section><section className="resource-grid">{grade11Materials.map((material) => <article className="resource-card" key={`${material.subject}-${material.href}`}><div><span>{material.kind}</span><h3>{material.subject}</h3><p>{material.title}</p></div><div className="resource-actions"><a className="button" href={material.href} target="_blank" rel="noreferrer">Open source</a><button className="button primary" onClick={() => handleMaterial(material.subject, material.title)}>Use in AdaptEd</button></div></article>)}</section><div className="safety-card"><b>Source-safe study flow</b><p>AdaptEd uses these as Grade 11 references. Students should paste a small section, topic, or question instead of copying whole books into AI.</p></div></div>;
+}
+
 function PreferencesPage({ preferences, setPreferences }: { preferences: Preferences; setPreferences: (p: Preferences) => void }) {
   const tools = ["Examples", "Step-by-step explanations", "Visual organization", "Practice questions", "Key points", "Flashcards", "Real-world examples"];
   const update = <K extends keyof Preferences>(key: K, value: Preferences[K]) => setPreferences({ ...preferences, [key]: value });
@@ -713,6 +736,7 @@ export default function Home() {
         {view === "routine" && <RoutinePage />}
         {view === "communicate" && <CommunicatePage />}
         {view === "progress" && <ProgressPage />}
+        {view === "resources" && <ResourcesPage setLessonInput={setLessonInput} setView={setView} />}
         {view === "preferences" && <PreferencesPage preferences={preferences} setPreferences={setPreferences} />}
         {view === "settings" && <SettingsPage theme={theme} toggleTheme={toggleTheme} calm={calm} setCalm={setCalm} aiMode={aiMode} />}
       </div>
