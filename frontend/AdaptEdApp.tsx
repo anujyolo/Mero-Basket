@@ -157,6 +157,9 @@ type QuizQuestion = {
   explanation: string;
 };
 
+type QuizDifficulty = "Easy" | "Normal" | "Hard" | "Extremely hard";
+type QuizQuestionType = "Multiple choice" | "Concept check" | "Scenario" | "Exam style";
+
 type AssignmentTask = { title: string; minutes: number; done: boolean };
 type AssignmentResponse = { detectedHomework?: string; tasks?: { title: string; minutes: number }[]; answer?: string };
 
@@ -445,6 +448,31 @@ function makeQuiz(lessonInput: string, result?: LessonResult | null) {
   return { title: `${topic} quick quiz`, review: needs[0] || "main idea", questions: normalizeFiveQuestionQuiz(questions, topic, result) };
 }
 
+function tuneQuizQuestion(question: QuizQuestion, topic: string, difficulty: QuizDifficulty, questionType: QuizQuestionType, index: number): QuizQuestion {
+  if (difficulty === "Normal" && questionType === "Multiple choice") return question;
+  const prefix = questionType === "Scenario"
+    ? `Scenario ${index + 1}: A Grade 11 student is studying ${topic}. `
+    : questionType === "Exam style"
+      ? `Exam style ${index + 1}: `
+      : questionType === "Concept check"
+        ? `Concept check ${index + 1}: `
+        : "";
+  const difficultyHint = difficulty === "Easy"
+    ? "Choose the clearest basic answer."
+    : difficulty === "Hard"
+      ? "Choose the most accurate answer, not just the familiar one."
+      : difficulty === "Extremely hard"
+        ? "Choose the answer that best handles the deeper meaning and avoids traps."
+        : "";
+  const harderDistractor = difficulty === "Extremely hard" ? `A partly true but incomplete idea about ${topic}` : difficulty === "Hard" ? `A confusing detail related to ${topic}` : question.options[1];
+  return {
+    ...question,
+    question: `${prefix}${question.question} ${difficultyHint}`.trim(),
+    options: difficulty === "Easy" ? question.options : [question.options[0], harderDistractor, question.options[2] || `An unrelated idea about ${topic}`],
+    explanation: `${question.explanation} Difficulty: ${difficulty}. Type: ${questionType}.`,
+  };
+}
+
 function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
   const loweredAction = action.toLowerCase();
   const wantsSimple = /simpl/.test(loweredAction);
@@ -623,6 +651,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
   const [verificationCode, setVerificationCode] = useState("");
   const [typedCode, setTypedCode] = useState("");
   const [pendingAccount, setPendingAccount] = useState<StudentAccount | null>(null);
+  const [verificationReason, setVerificationReason] = useState<"signup" | "login">("signup");
   const [error, setError] = useState("");
   const accounts = () => readStoredJson<Record<string, StudentAccount>>(USER_ACCOUNTS_KEY, {
     "demo@student.com": { name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() },
@@ -631,11 +660,12 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
     localStorage.setItem(USER_ACCOUNTS_KEY, JSON.stringify({ ...accounts(), [account.email.toLowerCase()]: account }));
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
   };
-  function beginSignupVerification(account: StudentAccount) {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    setVerificationCode(code);
+  function beginEmailLinkVerification(account: StudentAccount, reason: "signup" | "login") {
+    const token = Math.random().toString(36).slice(2, 10).toUpperCase();
+    setVerificationCode(token);
     setTypedCode("");
     setPendingAccount(account);
+    setVerificationReason(reason);
     setMode("verify");
     setError("");
   }
@@ -647,11 +677,12 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
         setError("Please create your account again.");
         return;
       }
-      if (typedCode.trim() !== verificationCode) {
-        setError("Verification code does not match.");
+      if (typedCode.trim().toUpperCase() !== verificationCode) {
+        setError("Verification link was not confirmed.");
         return;
       }
-      saveAccount(pendingAccount);
+      if (verificationReason === "signup") saveAccount(pendingAccount);
+      else localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(pendingAccount));
       onLogin(pendingAccount);
       return;
     }
@@ -668,7 +699,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
     const stored = accounts();
     if (mode === "signup") {
       const account: StudentAccount = { name: name.trim() || displayNameFromEmail(cleanEmail), email: cleanEmail, password: cleanPassword, createdAt: new Date().toISOString() };
-      beginSignupVerification(account);
+      beginEmailLinkVerification(account, "signup");
       return;
     }
     const account = stored[cleanEmail];
@@ -676,8 +707,12 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
       setError("Email and password do not match. Create an account first or use the demo account.");
       return;
     }
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
-    onLogin(account);
+    if (account.email === "demo@student.com") {
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
+      onLogin(account);
+      return;
+    }
+    beginEmailLinkVerification(account, "login");
   }
   return (
     <main className="login-page">
@@ -691,7 +726,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
         </aside>
         <div className="login-card">
           <Logo />
-          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Verify your email."}</h1><p>{mode === "login" ? "Your email and password must match a saved account on this device." : mode === "signup" ? "Sign up first. You will verify your email before entering." : `We prepared a verification code for ${pendingAccount?.email || email}.`}</p></div>
+          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Check your email."}</h1><p>{mode === "login" ? "Private accounts need email-link verification after the password check." : mode === "signup" ? "Sign up first. You will verify your email before entering." : `A verification link is prepared for ${pendingAccount?.email || email}.`}</p></div>
           {mode !== "verify" && <div className="auth-tabs" role="group" aria-label="Login mode">
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
             <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Create account</button>
@@ -700,11 +735,12 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
             {mode === "verify" ? (
               <>
                 <div className="verification-card">
-                  <span>Demo verification code</span>
-                  <strong>{verificationCode}</strong>
-                  <p>In the real hosted version, this code would be sent to your email. For the hackathon demo, no email API is used.</p>
+                  <span>Email verification link</span>
+                  <strong>VERIFY-{verificationCode}</strong>
+                  <p>In production this link is sent to Gmail. This local demo shows the link because no email provider is connected.</p>
+                  <button className="button primary" type="button" onClick={() => setTypedCode(verificationCode)}>Open verification link</button>
                 </div>
-                <label>Enter verification code<input value={typedCode} onChange={(e) => setTypedCode(e.target.value)} inputMode="numeric" placeholder="6-digit code" /></label>
+                <label>Verification token<input value={typedCode} onChange={(e) => setTypedCode(e.target.value.toUpperCase())} placeholder="Click the email link or paste token" /></label>
               </>
             ) : (
               <>
@@ -714,7 +750,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
               </>
             )}
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="button primary large full" type="submit">{mode === "login" ? "Log in →" : mode === "signup" ? "Send verification →" : "Verify and enter →"}</button>
+            <button className="button primary large full" type="submit">{mode === "login" ? "Log in →" : mode === "signup" ? "Send verification link →" : "Verify and enter →"}</button>
             {mode === "verify" && <button className="button full" type="button" onClick={() => { setMode("signup"); setPendingAccount(null); setTypedCode(""); setError(""); }}>Change email</button>}
             <button className="button full" type="button" onClick={() => { setMode("login"); setEmail("demo@student.com"); setPassword("demo123"); setError(""); }}>Use demo account</button>
           </form>
@@ -886,17 +922,23 @@ function LessonResultCard({ result, action, onAction, onQuiz }: { result: Lesson
 function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview, onComplete }: { lessonInput: string; lessonResult: LessonResult | null; lessonAnalysis: LessonAnalysis | null; onReview: () => void; onComplete: (attempt: QuizAttempt) => void }) {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [difficulty, setDifficulty] = useState<QuizDifficulty>("Normal");
+  const [questionType, setQuestionType] = useState<QuizQuestionType>("Multiple choice");
   const quiz = useMemo(() => {
+    const build = (baseQuiz: { title: string; review: string; questions: QuizQuestion[] }) => {
+      const topic = baseQuiz.title.replace(/\s+quick quiz$/i, "");
+      return { ...baseQuiz, questions: baseQuiz.questions.map((question, index) => tuneQuizQuestion(question, topic, difficulty, questionType, index)) };
+    };
     if (lessonAnalysis?.quiz?.length) {
       const topic = lessonAnalysis.mainTopic;
-      return {
+      return build({
         title: `${topic} quick quiz`,
         review: lessonAnalysis.keyPoints[0] || "main idea",
         questions: normalizeFiveQuestionQuiz(lessonAnalysis.quiz, topic, lessonResult),
-      };
+      });
     }
-    return makeQuiz(lessonInput, lessonResult);
-  }, [lessonAnalysis, lessonInput, lessonResult]);
+    return build(makeQuiz(lessonInput, lessonResult));
+  }, [difficulty, lessonAnalysis, lessonInput, lessonResult, questionType]);
   const score = quiz.questions.reduce((n, q, i) => n + (answers[i] === q.answer ? 1 : 0), 0);
   const perfectScore = score === quiz.questions.length;
   function submitQuiz() {
@@ -912,7 +954,11 @@ function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview, onCompl
   }
   return (
     <section className="quiz-card">
-      <div className="card-title"><div><span className="eyebrow"><i /> 5 QUESTION CHECK</span><h2>{quiz.title}</h2></div><span className="preference-chip">No time limit</span></div>
+      <div className="card-title"><div><span className="eyebrow"><i /> 5 QUESTION CHECK</span><h2>{quiz.title}</h2></div><span className="preference-chip">{difficulty} · {questionType}</span></div>
+      {!submitted && <div className="quiz-controls">
+        <div><span>Difficulty</span>{(["Easy", "Normal", "Hard", "Extremely hard"] as QuizDifficulty[]).map((level) => <button type="button" className={difficulty === level ? "active" : ""} onClick={() => { setDifficulty(level); setAnswers({}); }} key={level}>{level}</button>)}</div>
+        <div><span>Question type</span>{(["Multiple choice", "Concept check", "Scenario", "Exam style"] as QuizQuestionType[]).map((type) => <button type="button" className={questionType === type ? "active" : ""} onClick={() => { setQuestionType(type); setAnswers({}); }} key={type}>{type}</button>)}</div>
+      </div>}
       {quiz.questions.map((q, i) => <fieldset key={q.question} className="question"><legend><span>{i + 1}</span>{q.question}</legend>{q.options.map((option, oi) => <label className={`${submitted ? oi === q.answer ? "correct" : answers[i] === oi ? "incorrect" : "" : ""}`} key={option}><input type="radio" name={`q-${i}`} checked={answers[i] === oi} onChange={() => !submitted && setAnswers((a) => ({ ...a, [i]: oi }))} />{option}{submitted && oi === q.answer && <b>Correct</b>}</label>)}{submitted && <p className="explanation">{q.explanation}</p>}</fieldset>)}
       {!submitted ? <button type="button" className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={submitQuiz}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{perfectScore ? "🎉 Great work! You answered all questions correctly. No weak area was detected in this quiz." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>{quiz.title.replace(/\s+quick quiz$/i, "")} · Check</b>{perfectScore ? <b>No weak area detected</b> : <b>{quiz.review} · Review</b>}</div>{!perfectScore && <button type="button" className="button primary" onClick={onReview}>Review weak area →</button>}<button type="button" className="button primary" onClick={() => { setAnswers({}); setSubmitted(false); }}>{perfectScore ? "Practice harder questions" : "Try again"}</button><button type="button" className="button" onClick={onReview}>{perfectScore ? "Review key points" : "Explain differently"}</button></div>}
     </section>
@@ -1076,20 +1122,22 @@ function CommunicatePage() {
 
 function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUser: StudentAccount; setView: (view: View) => void; setLessonInput: (value: string) => void }) {
   const [topic, setTopic] = useState("Accounting basics");
+  const [roomMode, setRoomMode] = useState<"Study" | "Competition">("Competition");
   const [friendEmail, setFriendEmail] = useState("");
   const [friends, setFriends] = useState<string[]>(() => readStoredJson("padhai-yatra-study-friends-v1", []));
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<{ from: string; text: string; time: string }[]>(() => readStoredJson("padhai-yatra-study-messages-v1", [
     { from: "Padhai Yatra", text: "Create a topic, invite friends, then start a group quiz together.", time: new Date().toISOString() },
   ]));
-  const inviteLink = `https://github.com/anujyolo/Mero-Basket?study=${encodeURIComponent(topic || "study-room")}`;
+  const roomCode = useMemo(() => `PY-${(topic || "ROOM").replace(/[^a-z0-9]/gi, "").slice(0, 4).toUpperCase() || "ROOM"}-${friends.length + 1}`, [friends.length, topic]);
+  const inviteLink = `https://github.com/anujyolo/Mero-Basket?room=${encodeURIComponent(roomCode)}&topic=${encodeURIComponent(topic || "study-room")}`;
   useEffect(() => { localStorage.setItem("padhai-yatra-study-friends-v1", JSON.stringify(friends)); }, [friends]);
   useEffect(() => { localStorage.setItem("padhai-yatra-study-messages-v1", JSON.stringify(messages)); }, [messages]);
   const invite = () => {
     const clean = friendEmail.trim().toLowerCase();
     if (!clean.includes("@")) return;
     setFriends((current) => current.includes(clean) ? current : [clean, ...current].slice(0, 12));
-    setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to study "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
+    setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to ${roomMode.toLowerCase()} room "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
     setFriendEmail("");
   };
   const send = () => {
@@ -1098,9 +1146,10 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
     setMessage("");
   };
   const startQuiz = () => {
-    setLessonInput(topic.trim() || "Grade 11 study topic");
+    setLessonInput(`${topic.trim() || "Grade 11 study topic"} group ${roomMode.toLowerCase()} quiz`);
     setView("quiz");
   };
+  const leaderboard = [currentUser.email, ...friends].slice(0, 5).map((player, index) => ({ player, score: Math.max(55, 96 - index * 9), status: index === 0 ? "Ready" : "Invited" }));
   return (
     <div className="page-content work-page">
       <section className="page-intro">
@@ -1112,9 +1161,10 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
         <article className="study-room-card main">
           <span className="eyebrow"><i /> ROOM SETUP</span>
           <label>Study topic<input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Accounting basics, demand curve, chemistry..." /></label>
+          <div className="room-mode" role="group" aria-label="Room mode">{(["Competition", "Study"] as const).map((mode) => <button type="button" className={roomMode === mode ? "active" : ""} onClick={() => setRoomMode(mode)} key={mode}>{mode}</button>)}</div>
           <label>Invite friend by email<div className="inline-form"><input value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} type="email" placeholder="friend@email.com" /><button className="button primary" type="button" onClick={invite}>Invite</button></div></label>
-          <div className="invite-link-box"><span>Share link</span><code>{inviteLink}</code><button className="button" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Copy link</button></div>
-          <div className="room-actions"><button className="button primary large" onClick={startQuiz}>Start group quiz →</button><button className="button large" onClick={() => setView("focus")}>Start focus session</button></div>
+          <div className="invite-link-box"><span>Room code: {roomCode}</span><code>{inviteLink}</code><button className="button" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Copy invite link</button></div>
+          <div className="room-actions"><button className="button primary large" onClick={startQuiz}>Start same quiz for everyone →</button><button className="button large" onClick={() => setView("focus")}>Start group focus</button></div>
         </article>
         <article className="study-room-card">
           <span className="eyebrow"><i /> FRIENDS</span>
@@ -1127,6 +1177,12 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
           <div className="inline-form"><input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write a study message..." /><button className="button primary" onClick={send}>Send</button></div>
           <div className="message-list">
             {messages.map((item, index) => <div key={`${item.time}-${index}`}><b>{item.from}</b><p>{item.text}</p><small>{new Date(item.time).toLocaleTimeString()}</small></div>)}
+          </div>
+        </article>
+        <article className="study-room-card">
+          <span className="eyebrow"><i /> LIVE SCOREBOARD</span>
+          <div className="leaderboard-list">
+            {leaderboard.map((row, index) => <div key={row.player}><b>#{index + 1}</b><span>{row.player}</span><strong>{row.score}%</strong><small>{row.status}</small></div>)}
           </div>
         </article>
       </section>
