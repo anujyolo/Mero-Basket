@@ -42,6 +42,67 @@ test("exposes the structured lesson adaptation endpoint", async () => {
   assert.ok(data.result.steps.length >= 3);
 });
 
+test("adapts non-photosynthesis lessons without canned photosynthesis content", async () => {
+  workerUrl.searchParams.set("non-photo-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/adapt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "Simplify",
+        content: "Fractions show parts of a whole. The denominator tells how many equal parts the whole is divided into. The numerator tells how many parts are being counted.",
+      }),
+    }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.match(data.result.title, /Fractions|Denominator|Numerator/i);
+  assert.doesNotMatch(JSON.stringify(data.result), /Photosynthesis|chlorophyll|plant/i);
+});
+
+test("explains topic-only lessons with a useful starter explanation", async () => {
+  workerUrl.searchParams.set("topic-only-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/adapt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "Simplify", content: "Zoology" }),
+    }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.result.title, "Zoology");
+  assert.match(data.result.summary, /Zoology/i);
+  assert.ok(data.result.summary.length > "Zoology".length);
+});
+
+test("uses the real topic when adapting a full paragraph", async () => {
+  workerUrl.searchParams.set("paragraph-topic-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/adapt", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "Simplify",
+        content: "The water cycle describes how water moves through evaporation, condensation, precipitation, and collection. Heat from the sun causes water in oceans, rivers, and lakes to evaporate into vapor.",
+      }),
+    }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.match(data.result.title, /water cycle/i);
+  assert.match(data.result.summary, /evaporation|condensation|precipitation/i);
+});
+
 test("reports a ready AI mode without exposing credentials", async () => {
   workerUrl.searchParams.set("status-test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);

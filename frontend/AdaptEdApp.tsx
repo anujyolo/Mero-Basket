@@ -35,6 +35,41 @@ type LessonResult = {
   example: string;
 };
 
+type LessonAnalysis = {
+  mainTopic: string;
+  summary: string;
+  simpleExplanation: string;
+  keyPoints: string[];
+  examples: string[];
+  learningSteps: string[];
+  quiz: QuizQuestion[];
+};
+
+type AdaptResponse = {
+  result: LessonResult;
+  analysis?: LessonAnalysis;
+};
+
+type FocusState = {
+  mode: "focus" | "break";
+  duration: number;
+  seconds: number;
+  running: boolean;
+  savedFocusDuration?: number;
+  savedFocusSeconds?: number;
+};
+
+function readStoredJson<T>(key: string, fallback: T) {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 type QuizQuestion = {
   question: string;
   options: string[];
@@ -108,6 +143,80 @@ const flashcards = [
   { front: "What are the inputs?", back: "Sunlight, water, and carbon dioxide." },
   { front: "What are the outputs?", back: "Glucose and oxygen." },
 ];
+
+function cleanText(value: string, fallback = "your lesson") {
+  return value.replace(/\s+/g, " ").trim() || fallback;
+}
+
+function getLessonTopic(lessonInput: string, result?: LessonResult | null) {
+  const title = cleanText(result?.title || "");
+  if (title && title !== "your lesson" && title !== "Your adapted lesson") return title;
+  const firstLine = cleanText(lessonInput).split(/[.!?]/)[0];
+  const words = firstLine.split(" ").filter(Boolean);
+  return words.slice(0, Math.min(words.length, 5)).join(" ") || "your lesson";
+}
+
+function makeFlashcards(lessonInput: string, result?: LessonResult | null) {
+  if (!result && /photosynthesis|chlorophyll/i.test(lessonInput)) return flashcards;
+  const topic = getLessonTopic(lessonInput, result);
+  const summary = cleanText(result?.summary || lessonInput, `The main idea of ${topic}.`);
+  const needs = result?.needs?.length ? result.needs : ["Main idea", "Key details", "Useful example"];
+  const steps = result?.steps?.length ? result.steps : ["Read the lesson once.", "Find the key words.", "Explain it in your own words."];
+  return [
+    { front: `What is the main idea of ${topic}?`, back: summary },
+    { front: "What are the key words?", back: needs.join(", ") },
+    { front: "What is the first study step?", back: steps[0] },
+    { front: "How can you check understanding?", back: result?.example || `Explain ${topic} in three short sentences.` },
+  ];
+}
+
+function makeQuiz(lessonInput: string, result?: LessonResult | null) {
+  if (!result && /photosynthesis|chlorophyll/i.test(lessonInput)) {
+    return { title: "Photosynthesis quick quiz", review: "Role of chlorophyll", questions: demoQuiz };
+  }
+  const topic = getLessonTopic(lessonInput, result);
+  const needs = result?.needs?.length ? result.needs : ["main idea", "important details", "example"];
+  const steps = result?.steps?.length ? result.steps : ["Read the lesson once.", "Find the key words.", "Explain the idea simply."];
+  const questions: QuizQuestion[] = [
+    {
+      question: `What should you understand first about ${topic}?`,
+      options: ["The main idea", "Only the longest word", "The page number"],
+      answer: 0,
+      explanation: "The main idea makes the rest of the lesson easier to organize.",
+    },
+    {
+      question: "Which detail should you remember?",
+      options: [needs[0] || "Main idea", "An unrelated fact", "Only the title"],
+      answer: 0,
+      explanation: "Important key words and facts help you rebuild the lesson in your own words.",
+    },
+    {
+      question: "What is a helpful next step?",
+      options: [steps[0] || "Read the lesson once.", "Skip the topic", "Memorize without checking"],
+      answer: 0,
+      explanation: "A small first step keeps the work manageable and easier to finish.",
+    },
+  ];
+  return { title: `${topic} quick quiz`, review: needs[0] || "main idea", questions };
+}
+
+function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
+  const loweredAction = action.toLowerCase();
+  const wantsSimple = /simpl/.test(loweredAction);
+  const wantsExample = /example|analogy/.test(loweredAction);
+  const wantsDeep = /deep|normal|differently/.test(loweredAction);
+  const wantsSteps = /step|break/.test(loweredAction);
+  return {
+    title: analysis.mainTopic,
+    summary: wantsSimple ? analysis.simpleExplanation : wantsDeep ? analysis.summary : analysis.simpleExplanation,
+    needs: analysis.keyPoints.slice(0, 6),
+    steps: (wantsSteps ? analysis.learningSteps : analysis.learningSteps.slice(0, Math.min(4, analysis.learningSteps.length))),
+    result: `You now have a clearer way to study ${analysis.mainTopic}.`,
+    example: wantsExample
+      ? analysis.examples[0] || `Use one example to explain ${analysis.mainTopic}.`
+      : analysis.examples[1] || analysis.examples[0] || `Use one example to explain ${analysis.mainTopic}.`,
+  } satisfies LessonResult;
+}
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
@@ -272,7 +381,8 @@ function StatCard({ label, value, note, icon }: { label: string; value: string; 
   return <article className="stat-card"><div className="stat-icon">{icon}</div><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
 }
 
-function Dashboard({ setView, lessonInput, setLessonInput, adapt }: { setView: (v: View) => void; lessonInput: string; setLessonInput: (v: string) => void; adapt: () => void }) {
+function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }: { setView: (v: View) => void; lessonInput: string; setLessonInput: (v: string) => void; adapt: () => void; lessonResult: LessonResult | null }) {
+  const topic = getLessonTopic(lessonInput, lessonResult);
   const choices: [View, string, string, string, string][] = [
     ["learn", "1", "Help me understand", "Paste a lesson and get a clearer explanation.", "mint"],
     ["assignments", "2", "Break down my work", "Turn a big assignment into small steps.", "sun"],
@@ -306,9 +416,9 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt }: { setView: (
 
         <aside className="now-card">
           <span className="eyebrow"><i /> RIGHT NOW</span>
-          <div className="now-illustration">🌿</div>
-          <small>SCIENCE · 15 MIN</small>
-          <h3>Photosynthesis</h3>
+          <div className="now-illustration">A</div>
+          <small>CURRENT LESSON · 15 MIN</small>
+          <h3>{topic}</h3>
           <p>Continue the lesson you started.</p>
           <button className="button primary full" onClick={() => setView("learn")}>Continue learning →</button>
           <button className="quiet-link" onClick={() => setView("routine")}>See today&apos;s routine</button>
@@ -346,27 +456,37 @@ function LessonResultCard({ result, action, onAction, onQuiz }: { result: Lesson
   );
 }
 
-function QuizCard({ onReview }: { onReview: () => void }) {
+function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview }: { lessonInput: string; lessonResult: LessonResult | null; lessonAnalysis: LessonAnalysis | null; onReview: () => void }) {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
-  const score = demoQuiz.reduce((n, q, i) => n + (answers[i] === q.answer ? 1 : 0), 0);
+  const quiz = useMemo(() => {
+    if (lessonAnalysis?.quiz?.length) {
+      return {
+        title: `${lessonAnalysis.mainTopic} quick quiz`,
+        review: lessonAnalysis.keyPoints[0] || "main idea",
+        questions: lessonAnalysis.quiz,
+      };
+    }
+    return makeQuiz(lessonInput, lessonResult);
+  }, [lessonAnalysis, lessonInput, lessonResult]);
+  const score = quiz.questions.reduce((n, q, i) => n + (answers[i] === q.answer ? 1 : 0), 0);
   return (
     <section className="quiz-card">
-      <div className="card-title"><div><span className="eyebrow"><i /> 3 QUESTION CHECK</span><h2>Photosynthesis quick quiz</h2></div><span className="preference-chip">No time limit</span></div>
-      {demoQuiz.map((q, i) => <fieldset key={q.question} className="question"><legend><span>{i + 1}</span>{q.question}</legend>{q.options.map((option, oi) => <label className={`${submitted ? oi === q.answer ? "correct" : answers[i] === oi ? "incorrect" : "" : ""}`} key={option}><input type="radio" name={`q-${i}`} checked={answers[i] === oi} onChange={() => !submitted && setAnswers((a) => ({ ...a, [i]: oi }))} />{option}{submitted && oi === q.answer && <b>✓ Correct</b>}</label>)}{submitted && <p className="explanation">{q.explanation}</p>}</fieldset>)}
-      {!submitted ? <button className="button primary" disabled={Object.keys(answers).length < demoQuiz.length} onClick={() => setSubmitted(true)}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {demoQuiz.length}</strong><p>{score === 3 ? "Strong work—you understand the core process." : "You understand the basic process. Chlorophyll is the best area to review next."}</p><div className="knowledge-row"><b>🟢 Photosynthesis basics · Strong</b><b>🟡 Role of chlorophyll · Review</b></div><button className="button primary" onClick={onReview}>Review weak area →</button><button className="button" onClick={() => { setAnswers({}); setSubmitted(false); }}>Try again</button></div>}
+      <div className="card-title"><div><span className="eyebrow"><i /> 3 QUESTION CHECK</span><h2>{quiz.title}</h2></div><span className="preference-chip">No time limit</span></div>
+      {quiz.questions.map((q, i) => <fieldset key={q.question} className="question"><legend><span>{i + 1}</span>{q.question}</legend>{q.options.map((option, oi) => <label className={`${submitted ? oi === q.answer ? "correct" : answers[i] === oi ? "incorrect" : "" : ""}`} key={option}><input type="radio" name={`q-${i}`} checked={answers[i] === oi} onChange={() => !submitted && setAnswers((a) => ({ ...a, [i]: oi }))} />{option}{submitted && oi === q.answer && <b>Correct</b>}</label>)}{submitted && <p className="explanation">{q.explanation}</p>}</fieldset>)}
+      {!submitted ? <button className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={() => setSubmitted(true)}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{score === quiz.questions.length ? "Strong work. You understand the main idea." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>Main idea · Check</b><b>{quiz.review} · Review</b></div><button className="button primary" onClick={onReview}>Review weak area →</button><button className="button" onClick={() => { setAnswers({}); setSubmitted(false); }}>Try again</button></div>}
     </section>
   );
 }
 
-function LearnPage({ lessonInput, setLessonInput, result, loading, stage, runAction, showQuiz, setShowQuiz }: { lessonInput: string; setLessonInput: (v: string) => void; result: LessonResult | null; loading: boolean; stage: number; runAction: (a: string) => void; showQuiz: boolean; setShowQuiz: (v: boolean) => void }) {
+function LearnPage({ lessonInput, setLessonInput, result, lessonAnalysis, loading, stage, runAction, showQuiz, setShowQuiz }: { lessonInput: string; setLessonInput: (v: string) => void; result: LessonResult | null; lessonAnalysis: LessonAnalysis | null; loading: boolean; stage: number; runAction: (a: string) => void; showQuiz: boolean; setShowQuiz: (v: boolean) => void }) {
   const [action, setAction] = useState("Simplify");
   const run = (a = action) => { setAction(a); runAction(a); setShowQuiz(false); };
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Adapt my lesson</h2><p>Paste anything you&apos;re learning. Adapt will keep the meaning accurate and change how it is explained.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Adaptation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Adapt for me ✦</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard onReview={() => { setShowQuiz(false); run("Explain deeply"); }} />}</div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Adapt my lesson</h2><p>Paste anything you&apos;re learning. Adapt will keep the meaning accurate and change how it is explained.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Adaptation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Adapt for me</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard lessonInput={lessonInput} lessonResult={result} lessonAnalysis={lessonAnalysis} onReview={() => { setShowQuiz(false); run("Explain deeply"); }} />}</div>;
 }
 
 function AssignmentsPage({ calm }: { calm: boolean }) {
-  const [text, setText] = useState("Read Chapter 4, answer Questions 1–10 and prepare a summary.");
+  const [text, setText] = useState("");
   const [tasks, setTasks] = useState<AssignmentTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [oneTask, setOneTask] = useState(false);
@@ -378,7 +498,7 @@ function AssignmentsPage({ calm }: { calm: boolean }) {
     const task = tasks[current] || tasks[tasks.length - 1];
     return <div className="page-content one-task-page"><span className="eyebrow"><i /> ONE TASK MODE</span><div className="one-task-card"><span>CURRENT TASK · {Math.min(current + 1, tasks.length)} OF {tasks.length}</span><div className="one-icon">{task.done ? "✓" : "▤"}</div><h2>{task.done ? "All tasks complete" : task.title}</h2><p>Estimated time: <b>{task.minutes} minutes</b></p><div className="one-progress"><i style={{ width: `${(completed / tasks.length) * 100}%` }} /></div><small>{completed} of {tasks.length} complete</small><div className="one-actions"><button className="button" onClick={() => setOneTask(false)}>See full plan</button><button className="button">Need help</button><button className="button">Take break</button>{!task.done && <button className="button primary" onClick={() => toggle(current)}>Complete task ✓</button>}</div></div></div>;
   }
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> ASSIGNMENT SUPPORT</span><h2>Break my assignment</h2><p>Turn a large instruction into clear, manageable steps with realistic time estimates.</p></section><section className="composer-card"><label htmlFor="assignment">Paste your assignment</label><textarea id="assignment" value={text} onChange={(e) => setText(e.target.value)} /><button className="button primary large" disabled={!text.trim() || loading} onClick={generate}>{loading ? "Building your plan…" : "Create step-by-step plan →"}</button></section>{tasks.length > 0 && !loading && <section className="assignment-plan"><div className="card-title"><div><span className="eyebrow"><i /> YOUR ASSIGNMENT PLAN</span><h2>{completed} / {tasks.length} completed</h2></div><button className="button" onClick={() => setOneTask(true)}>Enter one task mode</button></div><div className="progress-track"><i style={{ width: `${(completed / tasks.length) * 100}%` }} /></div><div className="task-list">{tasks.map((task, i) => <label className={task.done ? "done" : ""} key={`${task.title}-${i}`}><input type="checkbox" checked={task.done} onChange={() => toggle(i)} /><span>{task.done ? "✓" : i + 1}</span><div><b>{task.title}</b><small>{task.minutes} minutes</small></div></label>)}</div></section>}</div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> ASSIGNMENT SUPPORT</span><h2>Break my assignment</h2><p>Turn a large instruction into clear, manageable steps with realistic time estimates.</p></section><section className="composer-card"><label htmlFor="assignment">Paste your assignment</label><textarea id="assignment" value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the homework, project instructions, or study task here..." /><button className="button primary large" disabled={!text.trim() || loading} onClick={generate}>{loading ? "Building your plan…" : "Create step-by-step plan →"}</button></section>{tasks.length > 0 && !loading && <section className="assignment-plan"><div className="card-title"><div><span className="eyebrow"><i /> YOUR ASSIGNMENT PLAN</span><h2>{completed} / {tasks.length} completed</h2></div><button className="button" onClick={() => setOneTask(true)}>Enter one task mode</button></div><div className="progress-track"><i style={{ width: `${(completed / tasks.length) * 100}%` }} /></div><div className="task-list">{tasks.map((task, i) => <label className={task.done ? "done" : ""} key={`${task.title}-${i}`}><input type="checkbox" checked={task.done} onChange={() => toggle(i)} /><span>{task.done ? "✓" : i + 1}</span><div><b>{task.title}</b><small>{task.minutes} minutes</small></div></label>)}</div></section>}</div>;
 }
 
 function PlannerPage() {
@@ -392,23 +512,36 @@ function PlannerPage() {
   return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> STUDY PLANNER</span><h2>Plan around the time you have.</h2><p>A focused plan with breaks, priorities, and a clear finish line.</p></section><section className="planner-grid"><form className="form-card" onSubmit={(e) => { e.preventDefault(); setReady(true); }}><label>What are you studying?<input value={subject} onChange={(e) => setSubject(e.target.value)} /></label><label>How much time do you have?<select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}><option>30</option><option>45</option><option>60</option><option>90</option><option>120</option></select></label><label>When is your exam?<select value={exam} onChange={(e) => setExam(e.target.value)}><option>Tomorrow</option><option>This week</option><option>Next week</option></select></label><label>Topics<textarea value={topics} onChange={(e) => setTopics(e.target.value)} /></label><button className="button primary large" type="submit">Build my plan →</button></form><aside className="rescue-card"><span>EXAM TOMORROW?</span><h3>Exam Rescue Mode</h3><p>Adapt will prioritize weak areas, protect break time, and keep the plan realistic.</p><div><b>🔴 Photosynthesis</b><small>More time · needs practice</small></div><div><b>🟡 Respiration</b><small>Moderate review</small></div><div><b>🟢 Cell structure</b><small>Quick refresh</small></div></aside></section>{ready && <section className="generated-plan"><div className="card-title"><div><span className="eyebrow"><i /> {minutes}-MINUTE PLAN</span><h2>{subject} · {exam}</h2></div><span className="preference-chip">Based on your learning style</span></div>{slots.map((s, i) => <button className={done.includes(i) ? "done" : ""} onClick={() => setDone((d) => d.includes(i) ? d.filter((x) => x !== i) : [...d, i])} key={s[0]}><span>{done.includes(i) ? "✓" : i + 1}</span><b>{s[0]}</b><div><strong>{s[1]}</strong><small>{s[2]}</small></div></button>)}</section>}</div>;
 }
 
-function FlashcardsPage() {
+function FlashcardsPage({ lessonInput, lessonResult }: { lessonInput: string; lessonResult: LessonResult | null }) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [review, setReview] = useState<number[]>([]);
-  const card = flashcards[index];
-  function go(next: number) { setIndex((next + flashcards.length) % flashcards.length); setFlipped(false); }
-  return <div className="page-content center-page"><section className="page-intro"><span className="eyebrow"><i /> FLASHCARDS</span><h2>Photosynthesis essentials</h2><p>Card {index + 1} of {flashcards.length} · {review.length} marked for review</p></section><button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label="Flip flashcard"><span>{flipped ? "ANSWER" : "QUESTION"}</span><h2>{flipped ? card.back : card.front}</h2><small>Click to {flipped ? "see question" : "flip"}</small></button><div className="flash-actions"><button className="button" onClick={() => go(index - 1)}>← Previous</button><button className="button" onClick={() => setReview((r) => r.includes(index) ? r : [...r, index])}>Review again</button><button className="button primary" onClick={() => go(index + 1)}>Know it · Next →</button></div></div>;
+  const cards = useMemo(() => makeFlashcards(lessonInput, lessonResult), [lessonInput, lessonResult]);
+  const topic = getLessonTopic(lessonInput, lessonResult);
+  const card = cards[index] || cards[0];
+  function go(next: number) { setIndex((next + cards.length) % cards.length); setFlipped(false); }
+  return <div className="page-content center-page"><section className="page-intro"><span className="eyebrow"><i /> FLASHCARDS</span><h2>{topic} essentials</h2><p>Card {index + 1} of {cards.length} · {review.length} marked for review</p></section><button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label="Flip flashcard"><span>{flipped ? "ANSWER" : "QUESTION"}</span><h2>{flipped ? card.back : card.front}</h2><small>Click to {flipped ? "see question" : "flip"}</small></button><div className="flash-actions"><button className="button" onClick={() => go(index - 1)}>Previous</button><button className="button" onClick={() => setReview((r) => r.includes(index) ? r : [...r, index])}>Review again</button><button className="button primary" onClick={() => go(index + 1)}>Know it · Next</button></div></div>;
 }
 
-function FocusPage() {
-  const [duration, setDuration] = useState(15);
-  const [seconds, setSeconds] = useState(15 * 60);
-  const [running, setRunning] = useState(false);
-  useEffect(() => { if (!running || seconds <= 0) return; const timer = window.setInterval(() => setSeconds((s) => s - 1), 1000); return () => window.clearInterval(timer); }, [running, seconds]);
-  function select(n: number) { setDuration(n); setSeconds(n * 60); setRunning(false); }
-  const display = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-  return <div className="page-content focus-page"><span className="eyebrow"><i /> FOCUS MODE</span><section className="focus-card"><span>CURRENT TASK</span><h2>Learn photosynthesis</h2><div className="timer-ring" style={{ "--progress": `${(seconds / (duration * 60)) * 360}deg` } as React.CSSProperties}><div><strong>{display}</strong><small>{running ? "You’re doing well" : seconds === 0 ? "Session complete" : "Ready when you are"}</small></div></div><div className="duration-row">{[10, 15, 20, 25].map((n) => <button className={duration === n ? "active" : ""} onClick={() => select(n)} key={n}>{n} min</button>)}</div><div className="focus-actions"><button className="button" onClick={() => { setRunning(false); setSeconds(duration * 60); }}>Reset</button><button className="button primary large" onClick={() => setRunning(!running)}>{running ? "Pause" : seconds === 0 ? "Start again" : "Start focus"}</button><button className="button" onClick={() => { setRunning(false); setSeconds(5 * 60); setDuration(5); }}>Take break</button></div>{seconds === 0 && <p className="gentle-message">Nice work. Would you like to continue or take a break?</p>}</section></div>;
+function FocusPage({ lessonInput, lessonResult, focusState, setFocusState }: { lessonInput: string; lessonResult: LessonResult | null; focusState: FocusState; setFocusState: (value: FocusState | ((current: FocusState) => FocusState)) => void }) {
+  const topic = getLessonTopic(lessonInput, lessonResult);
+  useEffect(() => {
+    if (!focusState.running || focusState.seconds <= 0) return;
+    const timer = window.setInterval(() => {
+      setFocusState((current) => {
+        if (!current.running || current.seconds <= 1) {
+          return { ...current, seconds: 0, running: false };
+        }
+        return { ...current, seconds: current.seconds - 1 };
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [focusState.running, focusState.seconds, setFocusState]);
+  function select(n: number) { setFocusState({ mode: "focus", duration: n, seconds: n * 60, running: false, savedFocusDuration: undefined, savedFocusSeconds: undefined }); }
+  const display = `${String(Math.floor(focusState.seconds / 60)).padStart(2, "0")}:${String(focusState.seconds % 60).padStart(2, "0")}`;
+  const label = focusState.mode === "break" ? "BREAK" : "CURRENT TASK";
+  const title = focusState.mode === "break" ? "Take a break" : `Learn ${topic}`;
+  return <div className="page-content focus-page"><span className="eyebrow"><i /> FOCUS MODE</span><section className="focus-card"><span>{label}</span><h2>{title}</h2><div className="timer-ring" style={{ "--progress": `${(focusState.seconds / (focusState.duration * 60 || 1)) * 360}deg` } as React.CSSProperties}><div><strong>{display}</strong><small>{focusState.running ? "You are doing well" : focusState.seconds === 0 ? "Session complete" : "Ready when you are"}</small></div></div><div className="duration-row">{[10, 15, 20, 25].map((n) => <button className={focusState.mode === "focus" && focusState.duration === n ? "active" : ""} onClick={() => select(n)} key={n}>{n} min</button>)}</div><div className="focus-actions"><button className="button" onClick={() => setFocusState((current) => current.mode === "break" ? { ...current, running: false, seconds: current.duration * 60 } : { ...current, running: false, seconds: current.duration * 60, savedFocusDuration: undefined, savedFocusSeconds: undefined })}>Reset</button><button className="button primary large" onClick={() => setFocusState((current) => ({ ...current, running: !current.running }))}>{focusState.running ? "Pause" : focusState.seconds === 0 ? "Start again" : focusState.mode === "break" ? "Resume break" : "Start focus"}</button><button className="button" onClick={() => setFocusState((current) => current.mode === "break" ? { mode: "focus", duration: current.savedFocusDuration || 15, seconds: current.savedFocusSeconds || (current.savedFocusDuration || 15) * 60, running: false } : { mode: "break", duration: 5, seconds: 5 * 60, running: false, savedFocusDuration: current.duration, savedFocusSeconds: current.seconds })}>{focusState.mode === "break" ? "Resume focus" : "Take break"}</button></div>{focusState.seconds === 0 && <p className="gentle-message">Nice work. Would you like to continue or take a break?</p>}</section></div>;
 }
 
 function RoutinePage() {
@@ -451,13 +584,16 @@ export default function Home() {
   const [calm, setCalm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [preferences, setPreferences] = useState(defaultPreferences);
-  const [lessonInput, setLessonInput] = useState(demoLesson);
+  const [lessonInput, setLessonInput] = useState("");
   const [lessonResult, setLessonResult] = useState<LessonResult | null>(null);
+  const [lessonAnalysis, setLessonAnalysis] = useState<LessonAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState(0);
   const [showQuiz, setShowQuiz] = useState(false);
   const [aiMode, setAiMode] = useState<"checking" | "live" | "demo">("checking");
   const [helperOpen, setHelperOpen] = useState(false);
+  const [analysisCache, setAnalysisCache] = useState<Record<string, LessonAnalysis>>(() => readStoredJson("adapted-analysis-cache", {}));
+  const [focusState, setFocusState] = useState<FocusState>(() => readStoredJson("adapted-focus-state", { mode: "focus", duration: 15, seconds: 15 * 60, running: false }));
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("adapted-theme");
@@ -470,21 +606,41 @@ export default function Home() {
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem("adapted-theme", theme); }, [theme]);
   useEffect(() => { localStorage.setItem("adapted-preferences", JSON.stringify(preferences)); }, [preferences]);
   useEffect(() => { fetch("/api/status").then((r) => r.json()).then((data: { mode?: string }) => setAiMode(data.mode === "LIVE_AI" ? "live" : "demo")).catch(() => setAiMode("demo")); }, []);
+  useEffect(() => {
+    localStorage.setItem("adapted-analysis-cache", JSON.stringify(analysisCache));
+  }, [analysisCache]);
+  useEffect(() => {
+    localStorage.setItem("adapted-focus-state", JSON.stringify(focusState));
+  }, [focusState]);
 
   const title = useMemo(() => navItems.find((n) => n.id === view)?.label || (view === "settings" ? "Settings" : "AdaptEd"), [view]);
   const toggleTheme = () => setTheme((t) => t === "light" ? "dark" : "light");
   function login() { setScreen("app"); setView("dashboard"); }
   function quickDemo() { login(); }
   async function runAdapt(action: string) {
-    if (!lessonInput.trim()) return;
+    const normalizedLesson = lessonInput.trim();
+    if (!normalizedLesson) return;
     setLoading(true); setStage(0); setView("learn");
     const stages = window.setInterval(() => setStage((s) => Math.min(2, s + 1)), 480);
     try {
-      const response = await fetch("/api/adapt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, content: lessonInput, preferences }) });
-      if (!response.ok) throw new Error("Adaptation failed");
-      const data = await response.json() as { result: LessonResult };
-      setLessonResult(data.result);
+      const cachedAnalysis = analysisCache[normalizedLesson];
+      if (cachedAnalysis) {
+        setLessonAnalysis(cachedAnalysis);
+        setLessonResult(buildResultFromAnalysis(cachedAnalysis, action));
+      } else {
+        const response = await fetch("/api/adapt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, content: normalizedLesson, preferences }) });
+        if (!response.ok) throw new Error("Adaptation failed");
+        const data = await response.json() as AdaptResponse;
+        setLessonResult(data.result);
+        if (data.analysis) {
+          setLessonAnalysis(data.analysis);
+          setAnalysisCache((current) => ({ ...current, [normalizedLesson]: data.analysis! }));
+        } else {
+          setLessonAnalysis(null);
+        }
+      }
     } catch {
+      setLessonAnalysis(null);
       setLessonResult({ title: "Let’s try that again", summary: "Adapt could not prepare this explanation yet.", needs: [], steps: [], result: "Your original material is still safe.", example: "Check your connection and try again." });
     } finally { window.clearInterval(stages); setStage(2); setLoading(false); }
   }
@@ -499,13 +655,13 @@ export default function Home() {
       {menuOpen && <button className="nav-overlay" onClick={() => setMenuOpen(false)} aria-label="Close navigation overlay" />}
       <div className="app-main">
         <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} />
-        {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardAdapt} />}
-        {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} loading={loading} stage={stage} runAction={runAdapt} showQuiz={showQuiz} setShowQuiz={setShowQuiz} />}
+        {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardAdapt} lessonResult={lessonResult} />}
+        {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} lessonAnalysis={lessonAnalysis} loading={loading} stage={stage} runAction={runAdapt} showQuiz={showQuiz} setShowQuiz={setShowQuiz} />}
         {view === "assignments" && <AssignmentsPage calm={calm} />}
-        {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard onReview={() => { setLessonInput(demoLesson); runAdapt("Explain deeply"); }} /></div>}
+        {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runAdapt("Explain deeply")} /></div>}
         {view === "planner" && <PlannerPage />}
-        {view === "flashcards" && <FlashcardsPage />}
-        {view === "focus" && <FocusPage />}
+        {view === "flashcards" && <FlashcardsPage lessonInput={lessonInput} lessonResult={lessonResult} />}
+        {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} />}
         {view === "routine" && <RoutinePage />}
         {view === "communicate" && <CommunicatePage />}
         {view === "progress" && <ProgressPage />}
