@@ -443,6 +443,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .invite-link-box { padding: 16px; border-radius: 15px; background: var(--surface-2); display: grid; gap: 8px; }
 .invite-link-box span { color: var(--accent); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 .invite-link-box code { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.invite-status { margin: -8px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--accent-2); color: var(--accent-dark); font-size: 12px; font-weight: 720; }
 .room-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .room-mode { display: flex; flex-wrap: wrap; gap: 8px; }
 .friend-list, .message-list { display: grid; gap: 10px; }

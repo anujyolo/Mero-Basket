@@ -1124,6 +1124,7 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
   const [topic, setTopic] = useState("Accounting basics");
   const [roomMode, setRoomMode] = useState<"Study" | "Competition">("Competition");
   const [friendEmail, setFriendEmail] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
   const [friends, setFriends] = useState<string[]>(() => readStoredJson("padhai-yatra-study-friends-v1", []));
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<{ from: string; text: string; time: string }[]>(() => readStoredJson("padhai-yatra-study-messages-v1", [
@@ -1135,9 +1136,16 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
   useEffect(() => { localStorage.setItem("padhai-yatra-study-messages-v1", JSON.stringify(messages)); }, [messages]);
   const invite = () => {
     const clean = friendEmail.trim().toLowerCase();
-    if (!clean.includes("@")) return;
+    if (!clean.includes("@")) {
+      setInviteStatus("Enter a valid friend email first.");
+      return;
+    }
+    const subject = encodeURIComponent(`Join my Padhai Yatra ${roomMode.toLowerCase()} room`);
+    const body = encodeURIComponent(`Hi! Join my Padhai Yatra ${roomMode.toLowerCase()} room.\n\nTopic: ${topic}\nRoom code: ${roomCode}\nInvite link: ${inviteLink}\n\nWe can study together and take the same quiz.`);
+    window.location.href = `mailto:${clean}?subject=${subject}&body=${body}`;
     setFriends((current) => current.includes(clean) ? current : [clean, ...current].slice(0, 12));
     setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to ${roomMode.toLowerCase()} room "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
+    setInviteStatus(`Email draft opened for ${clean}. Press Send in your mail app.`);
     setFriendEmail("");
   };
   const send = () => {
@@ -1162,7 +1170,8 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
           <span className="eyebrow"><i /> ROOM SETUP</span>
           <label>Study topic<input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Accounting basics, demand curve, chemistry..." /></label>
           <div className="room-mode" role="group" aria-label="Room mode">{(["Competition", "Study"] as const).map((mode) => <button type="button" className={roomMode === mode ? "active" : ""} onClick={() => setRoomMode(mode)} key={mode}>{mode}</button>)}</div>
-          <label>Invite friend by email<div className="inline-form"><input value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} type="email" placeholder="friend@email.com" /><button className="button primary" type="button" onClick={invite}>Invite</button></div></label>
+          <label>Invite friend by email<div className="inline-form"><input value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} type="email" placeholder="friend@email.com" /><button className="button primary" type="button" onClick={invite}>Send invite</button></div></label>
+          {inviteStatus && <p className="invite-status">{inviteStatus}</p>}
           <div className="invite-link-box"><span>Room code: {roomCode}</span><code>{inviteLink}</code><button className="button" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Copy invite link</button></div>
           <div className="room-actions"><button className="button primary large" onClick={startQuiz}>Start same quiz for everyone →</button><button className="button large" onClick={() => setView("focus")}>Start group focus</button></div>
         </article>
