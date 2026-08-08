@@ -354,6 +354,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .one-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
 .planner-grid { display: grid; grid-template-columns: 1.3fr .7fr; gap: 17px; }
 .form-card textarea { min-height: 95px; resize: vertical; }
+.time-picker { display: grid; grid-template-columns: minmax(90px, 1fr) 1.2fr; gap: 8px; }
 .rescue-card { background: #332f2a; color: #fff; border-radius: var(--radius); padding: 28px; }
 .rescue-card > span { font-size: 9px; color: #e5bfb2; font-weight: 800; letter-spacing: .1em; }
 .rescue-card h3 { font-family: Georgia, serif; font-size: 30px; margin: 9px 0; }
@@ -389,6 +390,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .routine-layout, .communication-grid, .progress-layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
 .routine-card, .change-card, .choice-list, .message-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 25px; }
 .routine-item { min-height: 88px; display: grid; grid-template-columns: 65px 1fr; align-content: center; border-bottom: 1px solid var(--line); }
+.routine-item input { min-width: 0; margin: 4px 0; }
 .routine-item span { grid-row: span 2; color: var(--subtle); font-size: 9px; font-weight: 800; letter-spacing: .1em; }
 .routine-item small { color: var(--muted); }
 .routine-item.now { margin: 5px -10px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-2); }

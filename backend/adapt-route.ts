@@ -130,6 +130,50 @@ function getKeywords(content: string) {
     .map(([word]) => sentenceCase(word));
 }
 
+function isAccountingTopic(content: string) {
+  return /\b(accounting|accounts|accountancy|ledger|journal|debit|credit|balance sheet|trial balance|transaction)\b/i.test(content);
+}
+
+function getAccountingAnalysis() {
+  return {
+    mainTopic: "Accounting",
+    summary: "Accounting is the process of recording, classifying, summarizing, and reporting financial transactions. It helps students understand how money moves in a business and how financial statements are prepared.",
+    simpleExplanation: "Accounting means keeping clear records of money coming in, money going out, and what a business owns or owes.",
+    keyPoints: ["Transactions", "Journal entries", "Ledger", "Debit", "Credit", "Accounting equation"],
+    examples: [
+      "If a business buys furniture for cash, furniture increases and cash decreases.",
+      "A journal entry records both sides of a transaction so the accounts stay balanced.",
+    ],
+    learningSteps: [
+      "Understand what a financial transaction is.",
+      "Learn the debit and credit rules.",
+      "Practice writing simple journal entries.",
+      "Post entries to ledger accounts.",
+      "Check totals using the accounting equation.",
+    ],
+    quiz: [
+      {
+        question: "What is accounting mainly used for?",
+        options: ["Recording and reporting financial transactions", "Drawing pictures", "Measuring plant growth"],
+        answer: 0,
+        explanation: "Accounting tracks financial transactions and turns them into useful information.",
+      },
+      {
+        question: "In double-entry accounting, every transaction affects how many accounts?",
+        options: ["At least two accounts", "Only one account", "No accounts"],
+        answer: 0,
+        explanation: "Double-entry accounting records debit and credit effects for each transaction.",
+      },
+      {
+        question: "Which equation is the basic accounting equation?",
+        options: ["Assets = Liabilities + Capital", "Assets = Expenses only", "Capital = Sales only"],
+        answer: 0,
+        explanation: "Assets, liabilities, and capital form the base of accounting records.",
+      },
+    ],
+  } satisfies LessonAnalysis;
+}
+
 function getTopic(content: string) {
   const firstSentence = splitSentences(content)[0] || content;
   const contextMatch = firstSentence.match(/^(?:in|about|for)\s+([A-Za-z][A-Za-z-]{2,30})\b/i);
@@ -168,6 +212,8 @@ function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
 }
 
 function buildLocalAnalysis(content: string) {
+  if (isAccountingTopic(content)) return getAccountingAnalysis();
+
   const sentences = splitSentences(content);
   const main = sentences[0] || content;
   const detail = sentences.find((sentence) => sentence !== main && sentence.length > 35) || sentences[1] || main;
@@ -384,6 +430,18 @@ export async function POST(request: NextRequest) {
     const action = body.action || "Simplify";
     const apiKey = process.env.OPENAI_API_KEY;
     const textbookContext = await getSafeBookSearchContext(content);
+
+    if (textbookContext.mode === "GENERAL" && isAccountingTopic(content)) {
+      const analysis = getAccountingAnalysis();
+      return NextResponse.json({
+        mode: "DEMO_AI",
+        preferencesApplied: body.preferences,
+        textbookMode: textbookContext.mode,
+        textbookSources: textbookContext.sources,
+        analysis,
+        result: attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext),
+      });
+    }
 
     if (apiKey) {
       try {

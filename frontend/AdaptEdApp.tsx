@@ -4,7 +4,7 @@
 
 // Main frontend application: screens, interactions, and accessibility behavior.
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type View =
   | "dashboard"
@@ -79,7 +79,26 @@ type FocusState = {
   savedFocusSeconds?: number;
 };
 
+type StudySession = {
+  id: string;
+  subject: string;
+  topic: string;
+  date: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+};
+
+type RoutineItem = {
+  label: string;
+  subject: string;
+  detail: string;
+  time: string;
+};
+
 const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v2";
+const STUDY_SESSIONS_KEY = "adapted-study-sessions-v1";
+const ROUTINE_KEY = "adapted-routine-v1";
 
 function readStoredJson<T>(key: string, fallback: T) {
   if (typeof window === "undefined") return fallback;
@@ -205,6 +224,37 @@ function getLessonTopic(lessonInput: string, result?: LessonResult | null) {
   return words.slice(0, Math.min(words.length, 5)).join(" ") || "your lesson";
 }
 
+function isAccountingTopic(value: string) {
+  return /\b(accounting|accounts|accountancy|ledger|journal|debit|credit|balance sheet|trial balance|transaction)\b/i.test(value);
+}
+
+function accountingQuiz(topic = "Accounting") {
+  return {
+    title: `${topic} quick quiz`,
+    review: "Debit and credit rules",
+    questions: [
+      {
+        question: "What is accounting mainly used for?",
+        options: ["Recording and reporting financial transactions", "Drawing pictures", "Measuring plant growth"],
+        answer: 0,
+        explanation: "Accounting tracks money-related transactions and turns them into useful financial information.",
+      },
+      {
+        question: "In double-entry accounting, every transaction affects how many accounts?",
+        options: ["At least two accounts", "Only one account", "No accounts"],
+        answer: 0,
+        explanation: "Double-entry accounting records every transaction with debit and credit effects.",
+      },
+      {
+        question: "Which statement is correct?",
+        options: ["Assets = Liabilities + Capital", "Assets = Expenses only", "Capital = Sales only"],
+        answer: 0,
+        explanation: "The accounting equation is the base for preparing financial records.",
+      },
+    ] satisfies QuizQuestion[],
+  };
+}
+
 function makeFlashcards(lessonInput: string, result?: LessonResult | null) {
   if (!result && /photosynthesis|chlorophyll/i.test(lessonInput)) return flashcards;
   const topic = getLessonTopic(lessonInput, result);
@@ -220,6 +270,9 @@ function makeFlashcards(lessonInput: string, result?: LessonResult | null) {
 }
 
 function makeQuiz(lessonInput: string, result?: LessonResult | null) {
+  if (isAccountingTopic(`${lessonInput} ${result?.title || ""}`)) {
+    return accountingQuiz("Accounting");
+  }
   if (!result && /photosynthesis|chlorophyll/i.test(lessonInput)) {
     return { title: "Photosynthesis quick quiz", review: "Role of chlorophyll", questions: demoQuiz };
   }
@@ -269,6 +322,17 @@ function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
 
 function buildEmergencyAnalysis(lessonInput: string): LessonAnalysis {
   const topic = getLessonTopic(lessonInput).replace(/^(in|about|for)\s+/i, "");
+  if (isAccountingTopic(`${lessonInput} ${topic}`)) {
+    return {
+      mainTopic: "Accounting",
+      summary: "Accounting records, organizes, and reports financial transactions so a business can understand its money position.",
+      simpleExplanation: "Accounting means keeping clear money records: what came in, what went out, what is owned, and what is owed.",
+      keyPoints: ["Transactions", "Journal entries", "Ledger", "Debit", "Credit", "Accounting equation"],
+      examples: ["If a shop buys goods for cash, goods increase and cash decreases."],
+      learningSteps: ["Learn the accounting equation.", "Identify the accounts affected.", "Apply debit and credit rules.", "Write the journal entry."],
+      quiz: accountingQuiz("Accounting").questions,
+    };
+  }
   const cleanTopic = topic || "your lesson";
   const material = cleanText(lessonInput, cleanTopic);
   const firstSentence = material.split(/(?<=[.!?])\s+/)[0] || material;
@@ -349,7 +413,7 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
           <p>An AI learning companion that adapts explanations, assignments and study plans to the way you learn best.</p>
           <div className="hero-actions">
             <button className="button primary large" onClick={onStart}>Start learning <span>→</span></button>
-            <button className="button large" onClick={onDemo}>Try Alex&apos;s demo</button>
+            <button className="button large" onClick={onDemo}>Try Anuj&apos;s demo</button>
           </div>
           <div className="hero-proof">
             <span>✓ No medical labels</span><span>✓ Your preferences</span><span>✓ Calm by design</span>
@@ -400,7 +464,7 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
       <section className="final-cta">
         <Logo />
         <h2>Learning that adapts to you.</h2>
-        <p>Start with Alex&apos;s demo profile and personalize your first lesson in under a minute.</p>
+        <p>Start with Anuj&apos;s demo profile and personalize your first lesson in under a minute.</p>
         <button className="button primary large" onClick={onDemo}>Explore the demo <span>→</span></button>
       </section>
       <footer><span>AdaptEd AI · Hackathon 2026</span><span>Educational support, not clinical assessment.</span></footer>
@@ -422,7 +486,7 @@ function Login({ onLogin, onBack }: { onLogin: (email: string, password: string)
       <button className="back-link" onClick={onBack}>← Back to home</button>
       <section className="login-card">
         <Logo />
-        <div className="login-heading"><span className="eyebrow"><i /> LOCAL DEMO MODE</span><h1>Welcome back.</h1><p>Continue as Alex and explore the complete learning experience.</p></div>
+        <div className="login-heading"><span className="eyebrow"><i /> LOCAL DEMO MODE</span><h1>Welcome back.</h1><p>Continue as Anuj and explore the complete learning experience.</p></div>
         <form onSubmit={submit}>
           <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" /></label>
           <label>Password<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" /></label>
@@ -445,7 +509,7 @@ function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode }: { 
         <span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "checking" ? "Checking Adapt…" : aiMode === "live" ? "Adapt AI live" : "Adapt demo ready"}</span>
         <label className="calm-toggle"><input type="checkbox" checked={calm} onChange={(e) => setCalm(e.target.checked)} /><span className="switch" /><b>Calm mode</b></label>
         <button className="icon-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>{theme === "light" ? "☾" : "☀"}</button>
-        <div className="avatar" aria-label="Profile for Alex">A</div>
+        <div className="avatar" aria-label="Profile for Anuj">A</div>
       </div>
     </header>
   );
@@ -468,7 +532,7 @@ function Sidebar({ view, setView, calm, open, close, logout }: { view: View; set
       <div className="side-bottom">
         <button onClick={() => setView("settings")}><span>⚙</span>Settings</button>
         <button onClick={logout}><span>↪</span>Log out</button>
-        <div className="profile-mini"><div className="avatar">A</div><div><b>Alex Morgan</b><span>Student · Demo</span></div></div>
+        <div className="profile-mini"><div className="avatar">A</div><div><b>Anuj Adhikari</b><span>Student · Demo</span></div></div>
       </div>
     </aside>
   );
@@ -488,7 +552,7 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }
   ];
   return (
     <div className="page-content dashboard-page">
-      <section className="welcome-row simple-welcome"><div><p className="date-label">YOUR LEARNING SPACE</p><h2>Hi Alex, what can we make easier? <span>👋</span></h2><p>Choose one thing. Adapt will guide you step by step.</p></div><button className="streak-pill" onClick={() => setView("progress")}><span>◇</span><div><b>5 day streak</b><small>See your progress →</small></div></button></section>
+      <section className="welcome-row simple-welcome"><div><p className="date-label">YOUR LEARNING SPACE</p><h2>Hi Anuj, what can we make easier? <span>👋</span></h2><p>Choose one thing. Adapt will guide you step by step.</p></div><button className="streak-pill" onClick={() => setView("progress")}><span>◇</span><div><b>5 day streak</b><small>See your progress →</small></div></button></section>
 
       <section className="start-guide calm-hide" aria-label="Three simple steps">
         <div><b>1</b><span><strong>Choose a goal</strong><small>Pick one card below</small></span></div>
@@ -573,7 +637,7 @@ function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview }: { les
     <section className="quiz-card">
       <div className="card-title"><div><span className="eyebrow"><i /> 3 QUESTION CHECK</span><h2>{quiz.title}</h2></div><span className="preference-chip">No time limit</span></div>
       {quiz.questions.map((q, i) => <fieldset key={q.question} className="question"><legend><span>{i + 1}</span>{q.question}</legend>{q.options.map((option, oi) => <label className={`${submitted ? oi === q.answer ? "correct" : answers[i] === oi ? "incorrect" : "" : ""}`} key={option}><input type="radio" name={`q-${i}`} checked={answers[i] === oi} onChange={() => !submitted && setAnswers((a) => ({ ...a, [i]: oi }))} />{option}{submitted && oi === q.answer && <b>Correct</b>}</label>)}{submitted && <p className="explanation">{q.explanation}</p>}</fieldset>)}
-      {!submitted ? <button className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={() => setSubmitted(true)}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{perfectScore ? "🎉 Great work! You answered all questions correctly. No weak area was detected in this quiz." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>Main idea · Check</b>{perfectScore ? <b>No weak area detected</b> : <b>{quiz.review} · Review</b>}</div>{!perfectScore && <button className="button primary" onClick={onReview}>Review weak area →</button>}<button className="button primary" onClick={() => { setAnswers({}); setSubmitted(false); }}>{perfectScore ? "Practice harder questions" : "Try again"}</button><button className="button" onClick={onReview}>{perfectScore ? "Review key points" : "Explain differently"}</button></div>}
+      {!submitted ? <button type="button" className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={() => setSubmitted(true)}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{perfectScore ? "🎉 Great work! You answered all questions correctly. No weak area was detected in this quiz." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>Main idea · Check</b>{perfectScore ? <b>No weak area detected</b> : <b>{quiz.review} · Review</b>}</div>{!perfectScore && <button type="button" className="button primary" onClick={onReview}>Review weak area →</button>}<button type="button" className="button primary" onClick={() => { setAnswers({}); setSubmitted(false); }}>{perfectScore ? "Practice harder questions" : "Try again"}</button><button type="button" className="button" onClick={onReview}>{perfectScore ? "Review key points" : "Explain differently"}</button></div>}
     </section>
   );
 }
@@ -633,7 +697,8 @@ function AssignmentsPage({ calm }: { calm: boolean }) {
 
 function PlannerPage() {
   const [subject, setSubject] = useState("");
-  const [minutes, setMinutes] = useState(60);
+  const [timeAmount, setTimeAmount] = useState(60);
+  const [timeUnit, setTimeUnit] = useState<"minutes" | "hours" | "days" | "weeks">("minutes");
   const [exam, setExam] = useState("Tomorrow");
   const [topics, setTopics] = useState("");
   const [ready, setReady] = useState(false);
@@ -641,8 +706,12 @@ function PlannerPage() {
   const topicList = (topics || subject || "Main topic").split(/,|\n/).map((topic) => topic.trim()).filter(Boolean);
   const focusTopics = topicList.length ? topicList : [subject || "Main topic"];
   const planSubject = subject.trim() || focusTopics[0] || "Study plan";
-  const slots = [["0-10 min", focusTopics[0], "Review the basics"], ["10-20 min", focusTopics[1] || focusTopics[0], "Practice examples"], ["20-25 min", "Short break", "Reset"], ["25-35 min", focusTopics[2] || focusTopics[0], "Solve questions"], ["35-45 min", "Mini quiz", "Check understanding"]].slice(0, minutes <= 30 ? 4 : 5);
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> STUDY PLANNER</span><h2>Plan around the time you have.</h2><p>A focused plan with breaks, priorities, and a clear finish line.</p></section><section className="planner-grid"><form className="form-card" onSubmit={(e) => { e.preventDefault(); setDone([]); setReady(true); }}><label>What are you studying?<input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Maths, accounting, science..." /></label><label>How much time do you have?<select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}><option>30</option><option>45</option><option>60</option><option>90</option><option>120</option></select></label><label>When is your exam?<select value={exam} onChange={(e) => setExam(e.target.value)}><option>Tomorrow</option><option>This week</option><option>Next week</option></select></label><label>Topics<textarea value={topics} onChange={(e) => setTopics(e.target.value)} placeholder="Algebra, fractions, word problems..." /></label><button className="button primary large" type="submit">Build my plan →</button></form><aside className="rescue-card"><span>EXAM TOMORROW?</span><h3>Exam Rescue Mode</h3><p>Adapt will prioritize weak areas, protect break time, and keep the plan realistic.</p>{focusTopics.slice(0, 3).map((topic, i) => <div key={`${topic}-${i}`}><b>{topic}</b><small>{i === 0 ? "Focus first" : i === 1 ? "Practice next" : "Quick refresh"}</small></div>)}</aside></section>{ready && <section className="generated-plan"><div className="card-title"><div><span className="eyebrow"><i /> {minutes}-MINUTE PLAN</span><h2>{planSubject} · {exam}</h2></div><span className="preference-chip">Based on your learning style</span></div>{slots.map((s, i) => <button className={done.includes(i) ? "done" : ""} onClick={() => setDone((d) => d.includes(i) ? d.filter((x) => x !== i) : [...d, i])} key={`${s[0]}-${s[1]}`}><span>{done.includes(i) ? "✓" : i + 1}</span><b>{s[0]}</b><div><strong>{s[1]}</strong><small>{s[2]}</small></div></button>)}</section>}</div>;
+  const totalMinutes = timeUnit === "minutes" ? timeAmount : timeUnit === "hours" ? timeAmount * 60 : timeUnit === "days" ? timeAmount * 120 : timeAmount * 5 * 120;
+  const planLabel = `${timeAmount} ${timeUnit}`;
+  const slots = totalMinutes <= 180
+    ? [["0-15 min", focusTopics[0], "Review foundations"], ["15-35 min", focusTopics[1] || focusTopics[0], "Practice examples"], ["35-40 min", "Short break", "Reset"], ["40-55 min", focusTopics[2] || focusTopics[0], "Solve questions"], ["55-60 min", "Mini quiz", "Check understanding"]]
+    : [["Day 1", focusTopics[0], "Learn the basics"], ["Day 2", focusTopics[1] || focusTopics[0], "Practice core questions"], ["Middle", focusTopics[2] || focusTopics[0], "Fix weak areas"], ["Before exam", "Mock quiz", "Check speed and accuracy"], ["Final review", "Key points", "Revise lightly"]];
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> STUDY PLANNER</span><h2>Plan around the time you have.</h2><p>A focused plan with breaks, priorities, and a clear finish line.</p></section><section className="planner-grid"><form className="form-card" onSubmit={(e) => { e.preventDefault(); setDone([]); setReady(true); }}><label>What are you studying?<input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Maths, accounting, science..." /></label><label>How much time do you have?<div className="time-picker"><input type="number" min="1" value={timeAmount} onChange={(e) => setTimeAmount(Math.max(1, Number(e.target.value) || 1))} /><select value={timeUnit} onChange={(e) => setTimeUnit(e.target.value as "minutes" | "hours" | "days" | "weeks")}><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option><option value="weeks">weeks</option></select></div></label><label>When is your exam?<select value={exam} onChange={(e) => setExam(e.target.value)}><option>Tomorrow</option><option>This week</option><option>Next week</option><option>In a few weeks</option></select></label><label>Topics<textarea value={topics} onChange={(e) => setTopics(e.target.value)} placeholder="Algebra, fractions, word problems..." /></label><button className="button primary large" type="submit">Build my plan →</button></form><aside className="rescue-card"><span>SMART TIME PLAN</span><h3>{planLabel}</h3><p>Adapt will spread work based on whether you have minutes, hours, days, or weeks.</p>{focusTopics.slice(0, 3).map((topic, i) => <div key={`${topic}-${i}`}><b>{topic}</b><small>{i === 0 ? "Focus first" : i === 1 ? "Practice next" : "Quick refresh"}</small></div>)}</aside></section>{ready && <section className="generated-plan"><div className="card-title"><div><span className="eyebrow"><i /> {planLabel.toUpperCase()} PLAN</span><h2>{planSubject} · {exam}</h2></div><span className="preference-chip">Based on your learning style</span></div>{slots.map((s, i) => <button type="button" className={done.includes(i) ? "done" : ""} onClick={() => setDone((d) => d.includes(i) ? d.filter((x) => x !== i) : [...d, i])} key={`${s[0]}-${s[1]}`}><span>{done.includes(i) ? "✓" : i + 1}</span><b>{s[0]}</b><div><strong>{s[1]}</strong><small>{s[2]}</small></div></button>)}</section>}</div>;
 }
 
 function FlashcardsPage({ lessonInput, lessonResult }: { lessonInput: string; lessonResult: LessonResult | null }) {
@@ -656,20 +725,33 @@ function FlashcardsPage({ lessonInput, lessonResult }: { lessonInput: string; le
   return <div className="page-content center-page"><section className="page-intro"><span className="eyebrow"><i /> FLASHCARDS</span><h2>{topic} essentials</h2><p>Card {index + 1} of {cards.length} · {review.length} marked for review</p></section><button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label="Flip flashcard"><span>{flipped ? "ANSWER" : "QUESTION"}</span><h2>{flipped ? card.back : card.front}</h2><small>Click to {flipped ? "see question" : "flip"}</small></button><div className="flash-actions"><button className="button" onClick={() => go(index - 1)}>Previous</button><button className="button" onClick={() => setReview((r) => r.includes(index) ? r : [...r, index])}>Review again</button><button className="button primary" onClick={() => go(index + 1)}>Know it · Next</button></div></div>;
 }
 
-function FocusPage({ lessonInput, lessonResult, focusState, setFocusState }: { lessonInput: string; lessonResult: LessonResult | null; focusState: FocusState; setFocusState: (value: FocusState | ((current: FocusState) => FocusState)) => void }) {
+function FocusPage({ lessonInput, lessonResult, focusState, setFocusState, onSessionComplete }: { lessonInput: string; lessonResult: LessonResult | null; focusState: FocusState; setFocusState: (value: FocusState | ((current: FocusState) => FocusState)) => void; onSessionComplete: (session: StudySession) => void }) {
   const topic = getLessonTopic(lessonInput, lessonResult);
   useEffect(() => {
     if (!focusState.running || focusState.seconds <= 0) return;
     const timer = window.setInterval(() => {
       setFocusState((current) => {
         if (!current.running || current.seconds <= 1) {
+          if (current.mode === "focus") {
+            const endedAt = new Date();
+            const durationSeconds = current.duration * 60;
+            onSessionComplete({
+              id: `${endedAt.toISOString()}-${topic}`,
+              subject: topic.split(/\s+/)[0] || "Study",
+              topic,
+              date: endedAt.toISOString().slice(0, 10),
+              startedAt: new Date(endedAt.getTime() - durationSeconds * 1000).toISOString(),
+              endedAt: endedAt.toISOString(),
+              durationSeconds,
+            });
+          }
           return { ...current, seconds: 0, running: false };
         }
         return { ...current, seconds: current.seconds - 1 };
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [focusState.running, focusState.seconds, setFocusState]);
+  }, [focusState.running, focusState.seconds, onSessionComplete, setFocusState, topic]);
   function select(n: number) { setFocusState({ mode: "focus", duration: n, seconds: n * 60, running: false, savedFocusDuration: undefined, savedFocusSeconds: undefined }); }
   const display = `${String(Math.floor(focusState.seconds / 60)).padStart(2, "0")}:${String(focusState.seconds % 60).padStart(2, "0")}`;
   const label = focusState.mode === "break" ? "BREAK" : "CURRENT TASK";
@@ -678,8 +760,21 @@ function FocusPage({ lessonInput, lessonResult, focusState, setFocusState }: { l
 }
 
 function RoutinePage() {
-  const [changed, setChanged] = useState(false);
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> TODAY’S ROUTINE</span><h2>Know what&apos;s now and what&apos;s next.</h2><p>A predictable view of your day, with clear support when plans change.</p></section><section className="routine-layout"><div className="routine-card"><div className="routine-item done"><span>DONE</span><b>Mathematics</b><small>9:00 AM · Linear equations</small></div><div className="routine-item now"><span>NOW</span><b>{changed ? "Library" : "Science"}</b><small>10:00 AM · {changed ? "Research session" : "Photosynthesis"}</small></div><div className="routine-item next"><span>NEXT</span><b>Break</b><small>10:45 AM · 15 minutes</small></div><div className="routine-item"><span>LATER</span><b>English</b><small>11:00 AM · Essay outline</small></div></div><aside className="change-card"><span>OPTIONAL CHANGE SUPPORT</span><h3>{changed ? "Small change today" : "Need to change the plan?"}</h3>{changed ? <><div><small>Normally</small><b>Science · 10:00 AM</b></div><div><small>Today</small><b>Library · 10:00 AM</b></div><p>Everything else stays the same.</p><button className="button" onClick={() => setChanged(false)}>Restore normal plan</button></> : <><p>You can preview a schedule change without losing the rest of your routine.</p><button className="button primary" onClick={() => setChanged(true)}>Preview a small change</button></>}</aside></section></div>;
+  const defaultRoutine: RoutineItem[] = [
+    { label: "DONE", subject: "Mathematics", time: "9:00 AM", detail: "Linear equations" },
+    { label: "NOW", subject: "Science", time: "10:00 AM", detail: "Photosynthesis" },
+    { label: "NEXT", subject: "Break", time: "10:45 AM", detail: "15 minutes" },
+    { label: "LATER", subject: "English", time: "11:00 AM", detail: "Essay outline" },
+  ];
+  const [routine, setRoutine] = useState<RoutineItem[]>(() => readStoredJson(ROUTINE_KEY, defaultRoutine));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    localStorage.setItem(ROUTINE_KEY, JSON.stringify(routine));
+  }, [routine]);
+  function updateRoutine(index: number, key: keyof RoutineItem, value: string) {
+    setRoutine((items) => items.map((item, i) => i === index ? { ...item, [key]: value } : item));
+  }
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> TODAY’S ROUTINE</span><h2>Know what&apos;s now and what&apos;s next.</h2><p>Edit the routine for Anuj&apos;s real day. It is saved on this browser.</p></section><section className="routine-layout"><div className="routine-card">{routine.map((item, index) => <div className={`routine-item ${item.label.toLowerCase()}`} key={`${item.label}-${index}`}>{editing ? <><input value={item.label} onChange={(e) => updateRoutine(index, "label", e.target.value)} aria-label="Routine label" /><input value={item.subject} onChange={(e) => updateRoutine(index, "subject", e.target.value)} aria-label="Routine subject" /><input value={item.time} onChange={(e) => updateRoutine(index, "time", e.target.value)} aria-label="Routine time" /><input value={item.detail} onChange={(e) => updateRoutine(index, "detail", e.target.value)} aria-label="Routine detail" /></> : <><span>{item.label}</span><b>{item.subject}</b><small>{item.time} · {item.detail}</small></>}</div>)}</div><aside className="change-card"><span>EDITABLE ROUTINE</span><h3>{editing ? "Editing schedule" : "Need to change the plan?"}</h3><p>{editing ? "Change subject, time, and details. Your edits save automatically." : "Use edit mode to make this match Anuj’s real school or hackathon day."}</p><button className="button primary" onClick={() => setEditing((value) => !value)}>{editing ? "Done editing" : "Edit routine"}</button><button className="button" onClick={() => setRoutine(defaultRoutine)}>Reset demo routine</button></aside></section></div>;
 }
 
 function CommunicatePage() {
@@ -702,9 +797,28 @@ function CommunicatePage() {
   return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> HELP ME COMMUNICATE</span><h2>Find the words for what you need.</h2><p>Choose what fits right now. Adapt will help you create a respectful message for a teacher.</p></section><section className="communication-grid"><div className="choice-list">{choices.map((item) => <button className={choice === item.label ? "active" : ""} onClick={() => setChoice(item.label)} key={item.label}><span>{item.icon}</span>{item.label}<i>→</i></button>)}</div><article className="message-card"><span className="eyebrow"><i /> SUGGESTED MESSAGE</span><h3>{choice}</h3><blockquote>“{message}”</blockquote><div className="tone-row">{["Short", "Clear", "Formal"].map((t) => <button className={tone === t ? "active" : ""} onClick={() => setTone(t as "Short" | "Clear" | "Formal")} key={t}>{t === "Short" ? "Make shorter" : t === "Formal" ? "Make more formal" : "Make simpler"}</button>)}</div><button className="button primary" onClick={async () => { await navigator.clipboard?.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied ✓" : "Copy message"}</button></article></section></div>;
 }
 
-function ProgressPage() {
-  const topics = [["Python functions", "92%", "🟢 Strong"], ["Photosynthesis", "68%", "🟡 Review"], ["Linear equations", "42%", "🔴 Needs practice"]];
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> LEARNING PROGRESS</span><h2>Your progress, without pressure.</h2><p>These indicators show what to study next. They are not medical or psychological assessments.</p></section><section className="stats-grid"><StatCard label="Topics studied" value="24" note="6 this week" icon="▤" /><StatCard label="Study time" value="6h 45m" note="Steady progress" icon="◷" /><StatCard label="Quizzes completed" value="14" note="Average 78%" icon="⚡" /><StatCard label="Tasks completed" value="38" note="8 this week" icon="✓" /></section><section className="progress-layout"><article className="topic-progress"><div className="card-title"><div><span className="eyebrow"><i /> RECENT TOPICS</span><h2>What to review next</h2></div></div>{topics.map((t) => <div key={t[0]}><span><b>{t[0]}</b><small>{t[2]}</small></span><strong>{t[1]}</strong><i><em style={{ width: t[1] }} /></i></div>)}</article><article className="week-card"><span>THIS WEEK</span><h3>2h 35m</h3><div className="bars">{[35, 60, 42, 78, 55, 88, 30].map((h, i) => <i style={{ height: `${h}%` }} key={i}><small>{["S", "M", "T", "W", "T", "F", "S"][i]}</small></i>)}</div><p>Friday was your most focused day.</p></article></section></div>;
+function formatDuration(seconds: number) {
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!minutes) return "0m";
+  return hours ? `${hours}h ${rest}m` : `${rest}m`;
+}
+
+function ProgressPage({ sessions }: { sessions: StudySession[] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todaySessions = sessions.filter((session) => session.date === today);
+  const totalSeconds = sessions.reduce((sum, session) => sum + session.durationSeconds, 0);
+  const todaySeconds = todaySessions.reduce((sum, session) => sum + session.durationSeconds, 0);
+  const topics = [...new Set(sessions.map((session) => session.topic))];
+  const weekBars = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const key = date.toISOString().slice(0, 10);
+    return sessions.filter((session) => session.date === key).reduce((sum, session) => sum + Math.round(session.durationSeconds / 60), 0);
+  });
+  const maxBar = Math.max(1, ...weekBars);
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> REAL STUDY TRACKING</span><h2>Track Anuj&apos;s real focus time.</h2><p>These numbers come from completed Focus sessions on this browser. No fake demo progress is shown.</p></section><section className="stats-grid"><StatCard label="Topics studied" value={String(topics.length)} note="From focus sessions" icon="▤" /><StatCard label="Study time" value={formatDuration(totalSeconds)} note={`Today: ${formatDuration(todaySeconds)}`} icon="◷" /><StatCard label="Sessions completed" value={String(sessions.length)} note="Completed timers" icon="⚡" /><StatCard label="Today" value={formatDuration(todaySeconds)} note="Tracked today" icon="✓" /></section><section className="progress-layout"><article className="topic-progress"><div className="card-title"><div><span className="eyebrow"><i /> STUDY HISTORY</span><h2>Recent tracked sessions</h2></div></div>{sessions.length ? sessions.slice(0, 8).map((session) => <div key={session.id}><span><b>{session.subject}</b><small>{session.topic} · {session.date}</small></span><strong>{formatDuration(session.durationSeconds)}</strong><i><em style={{ width: `${Math.min(100, Math.max(8, Math.round(session.durationSeconds / 60)))}%` }} /></i></div>) : <div><span><b>No real study time tracked yet</b><small>Complete a Focus session to add history.</small></span><strong>0m</strong><i><em style={{ width: "0%" }} /></i></div>}</article><article className="week-card"><span>LAST 7 DAYS</span><h3>{formatDuration(weekBars.reduce((sum, minutes) => sum + minutes * 60, 0))}</h3><div className="bars">{weekBars.map((minutes, i) => <i style={{ height: `${Math.max(6, (minutes / maxBar) * 100)}%` }} key={`${minutes}-${i}`} title={`${minutes} minutes`}><small>{["S", "M", "T", "W", "T", "F", "S"][i]}</small></i>)}</div><p>{sessions.length ? "Tap/hover bars to see minutes for each day." : "Start and finish a Focus timer to begin tracking."}</p></article></section></div>;
 }
 
 function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string) => void; setView: (v: View) => void }) {
@@ -731,7 +845,13 @@ function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string
       .then((data: { books?: BookLibraryItem[] }) => {
         if (cancelled || !data.books) return;
         const bySubject = new Map(data.books.map((book) => [book.subject.toLowerCase(), book]));
-        setBooks((current) => current.map((book) => bySubject.get(book.subject.toLowerCase()) || book));
+        setBooks((current) => current.map((book) => {
+          const serverBook = bySubject.get(book.subject.toLowerCase());
+          if (!serverBook) return book;
+          const bundledPdf = book.fileUrl?.startsWith("/study_materials/");
+          if (bundledPdf && serverBook.status === "Not Indexed") return book;
+          return serverBook;
+        }));
       })
       .catch(() => {
         if (!cancelled) setMessage("The book list is ready, but the local index endpoint could not be reached.");
@@ -751,7 +871,13 @@ function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string
     if (data.books) {
       setBooks((current) => {
         const bySubject = new Map(data.books!.map((book) => [book.subject.toLowerCase(), book]));
-        return current.map((book) => bySubject.get(book.subject.toLowerCase()) || book);
+        return current.map((book) => {
+          const serverBook = bySubject.get(book.subject.toLowerCase());
+          if (!serverBook) return book;
+          const bundledPdf = book.fileUrl?.startsWith("/study_materials/");
+          if (bundledPdf && serverBook.status === "Not Indexed") return book;
+          return serverBook;
+        });
       });
     }
   }
@@ -872,6 +998,7 @@ export default function Home() {
   const [helperOpen, setHelperOpen] = useState(false);
   const [analysisCache, setAnalysisCache] = useState<Record<string, LessonAnalysis>>(() => readStoredJson(ANALYSIS_CACHE_KEY, {}));
   const [focusState, setFocusState] = useState<FocusState>(() => readStoredJson("adapted-focus-state", { mode: "focus", duration: 15, seconds: 15 * 60, running: false }));
+  const [studySessions, setStudySessions] = useState<StudySession[]>(() => readStoredJson(STUDY_SESSIONS_KEY, []));
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("adapted-theme");
@@ -890,15 +1017,21 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("adapted-focus-state", JSON.stringify(focusState));
   }, [focusState]);
+  useEffect(() => {
+    localStorage.setItem(STUDY_SESSIONS_KEY, JSON.stringify(studySessions));
+  }, [studySessions]);
 
   const title = useMemo(() => navItems.find((n) => n.id === view)?.label || (view === "settings" ? "Settings" : "AdaptEd"), [view]);
   const toggleTheme = () => setTheme((t) => t === "light" ? "dark" : "light");
+  const recordStudySession = useCallback((session: StudySession) => {
+    setStudySessions((current) => current.some((item) => item.id === session.id) ? current : [session, ...current].slice(0, 100));
+  }, []);
   function login() { setScreen("app"); setView("dashboard"); }
   function quickDemo() { login(); }
   async function runAdapt(action: string) {
     const normalizedLesson = lessonInput.trim();
     if (!normalizedLesson) return;
-    setLoading(true); setStage(0); setView("learn");
+    setLoading(true); setStage(0); setShowQuiz(false); setView("learn");
     const stages = window.setInterval(() => setStage((s) => Math.min(2, s + 1)), 480);
     try {
       const cachedAnalysis = analysisCache[normalizedLesson];
@@ -945,10 +1078,10 @@ export default function Home() {
         {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runAdapt("Explain deeply")} /></div>}
         {view === "planner" && <PlannerPage />}
         {view === "flashcards" && <FlashcardsPage lessonInput={lessonInput} lessonResult={lessonResult} />}
-        {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} />}
+        {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} onSessionComplete={recordStudySession} />}
         {view === "routine" && <RoutinePage />}
         {view === "communicate" && <CommunicatePage />}
-        {view === "progress" && <ProgressPage />}
+        {view === "progress" && <ProgressPage sessions={studySessions} />}
         {view === "resources" && <ResourcesPage setLessonInput={setLessonInput} setView={setView} />}
         {view === "preferences" && <PreferencesPage preferences={preferences} setPreferences={setPreferences} />}
         {view === "settings" && <SettingsPage theme={theme} toggleTheme={toggleTheme} calm={calm} setCalm={setCalm} aiMode={aiMode} />}
