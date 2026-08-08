@@ -151,6 +151,42 @@ function initialsFor(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "A";
 }
 
+// Supabase auth errors are terse and technical. Rewrite the ones students actually hit.
+function friendlyAuthError(message: string) {
+  const text = message.toLowerCase();
+  if (text.includes("invalid login credentials")) return "Email or password is incorrect. Create an account first, or use the demo account below.";
+  if (text.includes("already registered") || text.includes("already been registered")) return "That email already has an account. Switch to “Log in” instead.";
+  if (text.includes("rate limit") || text.includes("for security purposes")) return "Too many email requests just now. Wait about a minute, then try again.";
+  if (text.includes("password should be")) return "Supabase requires a password of at least 6 characters.";
+  if (text.includes("failed to fetch") || text.includes("networkerror")) return "Could not reach Supabase. Check your internet connection and the Supabase URL in .env.local.";
+  return message;
+}
+
+// Turn a Supabase session user into the account shape the rest of the app uses.
+function accountFromSupabaseUser(user: { email?: string; created_at?: string; user_metadata?: Record<string, unknown> } | null | undefined, fallbackEmail: string): StudentAccount {
+  const email = user?.email || fallbackEmail;
+  const metaName = typeof user?.user_metadata?.name === "string" ? user.user_metadata.name : "";
+  return {
+    name: metaName || displayNameFromEmail(email),
+    email,
+    password: "supabase-auth",
+    createdAt: user?.created_at || new Date().toISOString(),
+  };
+}
+
+// Supabase returns email-link failures in the URL fragment (#error=...&error_description=...).
+// Without this the app silently ignores an expired link and the student just sees the login form again.
+function readAuthErrorFromUrl() {
+  if (typeof window === "undefined") return "";
+  const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const fromQuery = new URLSearchParams(window.location.search);
+  const description = fromHash.get("error_description") || fromQuery.get("error_description");
+  const code = fromHash.get("error") || fromQuery.get("error");
+  if (!description && !code) return "";
+  if (description) window.history.replaceState({}, "", window.location.pathname);
+  return description ? description.replace(/\+/g, " ") : `Sign-in link failed (${code}).`;
+}
+
 type QuizQuestion = {
   question: string;
   options: string[];
@@ -644,7 +680,7 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
   );
 }
 
-function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void; onBack: () => void }) {
+function Login({ onLogin, onBack, initialError }: { onLogin: (account: StudentAccount) => void; onBack: () => void; initialError?: string }) {
   const [mode, setMode] = useState<"login" | "signup" | "verify">("login");
   const [name, setName] = useState("Anuj Adhikari");
   const [email, setEmail] = useState(() => readStoredJson<StudentAccount | null>(CURRENT_USER_KEY, null)?.email || "demo@student.com");
@@ -654,7 +690,8 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
   const [pendingAccount, setPendingAccount] = useState<StudentAccount | null>(null);
   const [verificationReason, setVerificationReason] = useState<"signup" | "login">("signup");
   const [supabaseNotice, setSupabaseNotice] = useState("");
-  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(initialError || "");
   const accounts = () => readStoredJson<Record<string, StudentAccount>>(USER_ACCOUNTS_KEY, {
     "demo@student.com": { name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() },
   });
@@ -671,11 +708,58 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
     setMode("verify");
     setError("");
   }
+  // Verify screen: ask Supabase whether the emailed link has been opened yet.
+  async function checkConfirmedSession() {
+    if (!supabase) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (user?.email) {
+        onLogin(accountFromSupabaseUser(user, user.email));
+        return;
+      }
+      // The link opens in whatever browser handles mail, so the session may live in another tab.
+      // Re-running the password check here picks it up without a second email.
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim();
+      if (cleanEmail && cleanPassword.length >= 6) {
+        const { data: retry, error: retryError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword });
+        if (!retryError && retry.user) {
+          onLogin(accountFromSupabaseUser(retry.user, cleanEmail));
+          return;
+        }
+      }
+      setError("Not confirmed yet. Open the link in your inbox in this browser, then press this button again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendConfirmation() {
+    if (!supabase) return;
+    const cleanEmail = (pendingAccount?.email || email).trim().toLowerCase();
+    setBusy(true);
+    setError("");
+    try {
+      const { error: resendError } = await supabase.auth.resend({ type: "signup", email: cleanEmail });
+      if (resendError) {
+        setError(friendlyAuthError(resendError.message));
+        return;
+      }
+      setSupabaseNotice(`New confirmation link sent to ${cleanEmail}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     if (mode === "verify") {
       if (isSupabaseConfigured) {
-        setError("Check your email inbox and click the Supabase verification link to continue.");
+        await checkConfirmedSession();
         return;
       }
       if (!pendingAccount) {
@@ -698,8 +782,10 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
       setError("Enter a valid email address.");
       return;
     }
-    if (cleanPassword.length < 4) {
-      setError("Password must be at least 4 characters for this demo.");
+    // Supabase enforces a 6-character minimum; validating at 4 let signups fail server-side instead.
+    const minPassword = isSupabaseConfigured && cleanEmail !== "demo@student.com" ? 6 : 4;
+    if (cleanPassword.length < minPassword) {
+      setError(`Password must be at least ${minPassword} characters.`);
       return;
     }
     const stored = accounts();
@@ -707,47 +793,51 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
       const account: StudentAccount = { name: name.trim() || displayNameFromEmail(cleanEmail), email: cleanEmail, password: "supabase-auth", createdAt: new Date().toISOString() };
       setError("");
       setSupabaseNotice("");
-      if (mode === "signup") {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: cleanPassword,
-          options: {
-            data: { name: account.name },
-            emailRedirectTo: window.location.origin,
-          },
-        });
-        if (signUpError) {
-          setError(signUpError.message);
+      setBusy(true);
+      try {
+        if (mode === "signup") {
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: cleanPassword,
+            options: {
+              data: { name: account.name },
+              emailRedirectTo: `${window.location.origin}/`,
+            },
+          });
+          if (signUpError) {
+            setError(friendlyAuthError(signUpError.message));
+            return;
+          }
+          // With "Confirm email" off, Supabase signs the student straight in.
+          if (signUpData.session?.user) {
+            onLogin(accountFromSupabaseUser(signUpData.session.user, cleanEmail));
+            return;
+          }
+          setPendingAccount(account);
+          setVerificationReason("signup");
+          setMode("verify");
+          setSupabaseNotice(`Confirmation link sent to ${cleanEmail}. Open it in this browser, then press continue.`);
           return;
         }
-        setPendingAccount(account);
-        setVerificationReason("signup");
-        setMode("verify");
-        setSupabaseNotice(`Supabase sent a verification link to ${cleanEmail}. Click that email link to enter.`);
+        // Password sign-in is the whole login. The previous build signed the student back out
+        // and mailed a second magic link, which destroyed the session it had just created.
+        const { data: signInData, error: passwordError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword });
+        if (passwordError) {
+          if (/email not confirmed/i.test(passwordError.message)) {
+            setPendingAccount(account);
+            setVerificationReason("signup");
+            setMode("verify");
+            setSupabaseNotice(`${cleanEmail} is not confirmed yet. Open the link in your inbox, then press continue.`);
+            return;
+          }
+          setError(friendlyAuthError(passwordError.message));
+          return;
+        }
+        onLogin(accountFromSupabaseUser(signInData.user, cleanEmail));
         return;
+      } finally {
+        setBusy(false);
       }
-      const { error: passwordError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword });
-      if (passwordError) {
-        setError(passwordError.message);
-        return;
-      }
-      await supabase.auth.signOut();
-      const { error: linkError } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: window.location.origin,
-        },
-      });
-      if (linkError) {
-        setError(linkError.message);
-        return;
-      }
-      setPendingAccount(account);
-      setVerificationReason("login");
-      setMode("verify");
-      setSupabaseNotice(`Password matched. Supabase sent a login verification link to ${cleanEmail}.`);
-      return;
     }
     if (mode === "signup") {
       const account: StudentAccount = { name: name.trim() || displayNameFromEmail(cleanEmail), email: cleanEmail, password: cleanPassword, createdAt: new Date().toISOString() };
@@ -778,7 +868,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
         </aside>
         <div className="login-card">
           <Logo />
-          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Check your email."}</h1><p>{mode === "login" ? "Private accounts need email-link verification after the password check." : mode === "signup" ? "Sign up first. You will verify your email before entering." : isSupabaseConfigured ? `Click the Supabase email link sent to ${pendingAccount?.email || email}.` : `A verification link is prepared for ${pendingAccount?.email || email}.`}</p></div>
+          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Check your email."}</h1><p>{mode === "login" ? "Enter your email and password. Confirmed accounts go straight in." : mode === "signup" ? "Sign up first. Confirm your email once, then log in with your password." : isSupabaseConfigured ? `Click the Supabase email link sent to ${pendingAccount?.email || email}.` : `A verification link is prepared for ${pendingAccount?.email || email}.`}</p></div>
           {mode !== "verify" && <div className="auth-tabs" role="group" aria-label="Login mode">
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
             <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Create account</button>
@@ -789,8 +879,9 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
                 <div className="verification-card">
                   <span>{isSupabaseConfigured ? "Supabase email sent" : "Email verification link"}</span>
                   {isSupabaseConfigured ? <strong>CHECK EMAIL</strong> : <strong>VERIFY-{verificationCode}</strong>}
-                  <p>{isSupabaseConfigured ? supabaseNotice || "Click the verification link in your inbox. Supabase will create the session after the link opens." : "In production this link is sent to Gmail. This local demo shows the link because no email provider is connected."}</p>
+                  <p>{isSupabaseConfigured ? supabaseNotice || "Open the confirmation link in your inbox, then press continue below." : "In production this link is sent to Gmail. This local demo shows the link because no email provider is connected."}</p>
                   {!isSupabaseConfigured && <button className="button primary" type="button" onClick={() => setTypedCode(verificationCode)}>Open verification link</button>}
+                  {isSupabaseConfigured && <button className="button" type="button" disabled={busy} onClick={resendConfirmation}>Resend confirmation email</button>}
                 </div>
                 {!isSupabaseConfigured && <label>Verification token<input value={typedCode} onChange={(e) => setTypedCode(e.target.value.toUpperCase())} placeholder="Click the email link or paste token" /></label>}
               </>
@@ -802,9 +893,9 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
               </>
             )}
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="button primary large full" type="submit">{mode === "login" ? "Log in →" : mode === "signup" ? "Send verification link →" : "Verify and enter →"}</button>
-            {mode === "verify" && <button className="button full" type="button" onClick={() => { setMode("signup"); setPendingAccount(null); setTypedCode(""); setError(""); }}>Change email</button>}
-            <button className="button full" type="button" onClick={() => { setMode("login"); setEmail("demo@student.com"); setPassword("demo123"); setError(""); }}>Use demo account</button>
+            <button className="button primary large full" type="submit" disabled={busy}>{busy ? "Working…" : mode === "login" ? "Log in →" : mode === "signup" ? "Create account →" : isSupabaseConfigured ? "I confirmed my email — continue →" : "Verify and enter →"}</button>
+            {mode === "verify" && <button className="button full" type="button" onClick={() => { setMode("login"); setPendingAccount(null); setTypedCode(""); setSupabaseNotice(""); setError(""); }}>Back to log in</button>}
+            <button className="button full" type="button" onClick={() => { setMode("login"); setEmail("demo@student.com"); setPassword("demo123"); setSupabaseNotice(""); setError(""); }}>Use demo account</button>
           </form>
           <div className="demo-credentials"><b>Demo login</b><span>demo@student.com</span><span>Password: demo123</span></div>
           <p className="privacy-note">{isSupabaseConfigured ? "Supabase Auth is connected for real email verification links." : "Supabase keys are missing, so local demo verification is active."}</p>
@@ -1519,6 +1610,24 @@ export default function Home() {
   const [focusState, setFocusState] = useState<FocusState>(() => readStoredJson("adapted-focus-state", { mode: "focus", duration: 15, seconds: 15 * 60, running: false }));
   const [studySessions, setStudySessions] = useState<StudySession[]>(() => readStoredJson(STUDY_SESSIONS_KEY, []));
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(() => readStoredJson(QUIZ_ATTEMPTS_KEY, []));
+  const [authError, setAuthError] = useState("");
+
+  const login = useCallback((account: StudentAccount) => {
+    setCurrentUser(account);
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
+    setAuthError("");
+    setScreen("app");
+    setView("dashboard");
+  }, []);
+  // Clearing the screen is not a logout: without signOut() the Supabase session survives
+  // in localStorage and the next reload silently signs the student back in.
+  const logout = useCallback(async () => {
+    if (supabase) await supabase.auth.signOut();
+    localStorage.removeItem(CURRENT_USER_KEY);
+    setMenuOpen(false);
+    setView("dashboard");
+    setScreen("landing");
+  }, []);
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("adapted-theme");
@@ -1532,21 +1641,27 @@ export default function Home() {
   useEffect(() => { localStorage.setItem("adapted-preferences", JSON.stringify(preferences)); }, [preferences]);
   useEffect(() => { fetch("/api/status").then((r) => r.json()).then((data: { mode?: string }) => setAiMode(data.mode === "LIVE_AI" ? "live" : "demo")).catch(() => setAiMode("demo")); }, []);
   useEffect(() => {
+    // An expired or reused email link comes back as a URL fragment, not a session.
+    // Surface it on the login screen instead of dropping the student on the landing page.
+    const linkError = readAuthErrorFromUrl();
+    if (linkError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAuthError(linkError);
+      setScreen("login");
+    }
     if (!supabase) return;
-    const applySupabaseSession = (email?: string, name?: string, createdAt?: string) => {
-      if (!email) return;
-      login({ name: name || displayNameFromEmail(email), email, password: "supabase-auth", createdAt: createdAt || new Date().toISOString() });
+    const applySupabaseSession = (user: { email?: string; created_at?: string; user_metadata?: Record<string, unknown> } | undefined) => {
+      if (!user?.email) return;
+      login(accountFromSupabaseUser(user, user.email));
     };
-    supabase.auth.getSession().then(({ data }) => {
-      const user = data.session?.user;
-      applySupabaseSession(user?.email, typeof user?.user_metadata?.name === "string" ? user.user_metadata.name : undefined, user?.created_at);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user;
-      applySupabaseSession(user?.email, typeof user?.user_metadata?.name === "string" ? user.user_metadata.name : undefined, user?.created_at);
+    supabase.auth.getSession().then(({ data }) => applySupabaseSession(data.session?.user));
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      // SIGNED_OUT must not re-enter the app; logout() already moved us to the landing screen.
+      if (event === "SIGNED_OUT") return;
+      applySupabaseSession(session?.user);
     });
     return () => data.subscription.unsubscribe();
-  }, []);
+  }, [login]);
   useEffect(() => {
     localStorage.setItem(ANALYSIS_CACHE_KEY, JSON.stringify(analysisCache));
   }, [analysisCache]);
@@ -1568,12 +1683,6 @@ export default function Home() {
   const recordQuizAttempt = useCallback((attempt: QuizAttempt) => {
     setQuizAttempts((current) => current.some((item) => item.id === attempt.id) ? current : [attempt, ...current].slice(0, 100));
   }, []);
-  function login(account: StudentAccount) {
-    setCurrentUser(account);
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
-    setScreen("app");
-    setView("dashboard");
-  }
   function quickDemo() { login({ name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() }); }
   async function runLearningAction(action: string) {
     const normalizedLesson = lessonInput.trim();
@@ -1611,11 +1720,11 @@ export default function Home() {
   const dashboardLearningAction = () => runLearningAction("Simplify");
 
   if (screen === "landing") return <Landing onStart={() => setScreen("login")} onDemo={quickDemo} theme={theme} toggleTheme={toggleTheme} />;
-  if (screen === "login") return <Login onLogin={login} onBack={() => setScreen("landing")} />;
+  if (screen === "login") return <Login onLogin={login} onBack={() => { setAuthError(""); setScreen("landing"); }} initialError={authError} />;
 
   return (
     <div className={`app-shell ${calm ? "calm" : ""}`}>
-      <Sidebar view={view} setView={setView} calm={calm} open={menuOpen} close={() => setMenuOpen(false)} logout={() => setScreen("landing")} currentUser={currentUser} />
+      <Sidebar view={view} setView={setView} calm={calm} open={menuOpen} close={() => setMenuOpen(false)} logout={logout} currentUser={currentUser} />
       {menuOpen && <button className="nav-overlay" onClick={() => setMenuOpen(false)} aria-label="Close navigation overlay" />}
       <div className="app-main">
         <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} onProfile={() => setView("profile")} currentUser={currentUser} />
