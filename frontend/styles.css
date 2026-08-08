@@ -672,3 +672,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .xp-week-card .bars i { flex: 1; background: var(--accent); border-radius: 8px 8px 0 0; position: relative; min-height: 6px; }
 .xp-week-card .bars small { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--muted); }
 .xp-week-card p { margin: 30px 0 0; color: var(--muted); font-size: 12px; }
+
+/* Invitation banner on the login screen */
+.invite-banner { padding: 16px 18px; margin-bottom: 18px; border-radius: 14px; background: var(--accent-2); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); display: grid; gap: 5px; }
+.invite-banner span { color: var(--accent-dark); font-size: 10px; font-weight: 850; letter-spacing: .12em; }
+.invite-banner h3 { margin: 0; font-size: 19px; }
+.invite-banner p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }

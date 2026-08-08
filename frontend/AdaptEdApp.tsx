@@ -258,6 +258,20 @@ function accountFromSupabaseUser(user: { email?: string; created_at?: string; us
 
 // Supabase returns email-link failures in the URL fragment (#error=...&error_description=...).
 // Without this the app silently ignores an expired link and the student just sees the login form again.
+// An invite link carries the room in the query string. Read it at the app root so
+// an invited friend is routed to the room instead of the marketing landing page.
+function readRoomFromUrl() {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const room = params.get("room");
+  if (!room) return null;
+  return {
+    room,
+    topic: params.get("topic") || "",
+    mode: params.get("mode") === "Study" ? ("Study" as const) : ("Competition" as const),
+  };
+}
+
 function readAuthErrorFromUrl() {
   if (typeof window === "undefined") return "";
   const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -762,7 +776,7 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
   );
 }
 
-function Login({ onLogin, onBack, initialError }: { onLogin: (account: StudentAccount) => void; onBack: () => void; initialError?: string }) {
+function Login({ onLogin, onBack, initialError, invitedRoom }: { onLogin: (account: StudentAccount) => void; onBack: () => void; initialError?: string; invitedRoom?: { room: string; topic: string; mode: "Study" | "Competition" } | null }) {
   const [mode, setMode] = useState<"login" | "signup" | "verify">("login");
   const [name, setName] = useState("Anuj Adhikari");
   const [email, setEmail] = useState(() => readStoredJson<StudentAccount | null>(CURRENT_USER_KEY, null)?.email || "demo@student.com");
@@ -790,6 +804,12 @@ function Login({ onLogin, onBack, initialError }: { onLogin: (account: StudentAc
     setMode("verify");
     setError("");
   }
+  // An invited friend almost never has an account yet, so open on the signup tab.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (invitedRoom) setMode((current) => (current === "login" ? "signup" : current));
+  }, [invitedRoom]);
+
   // Verify screen: ask Supabase whether the emailed link has been opened yet.
   async function checkConfirmedSession() {
     if (!supabase) return;
@@ -887,6 +907,21 @@ function Login({ onLogin, onBack, initialError }: { onLogin: (account: StudentAc
             },
           });
           if (signUpError) {
+            // Supabase's built-in mailer caps at ~2 messages an hour, so a real signup
+            // fails purely because an email could not be sent. That must not stop a
+            // student joining — fall back to the device-local account and let them in.
+            const message = signUpError.message.toLowerCase();
+            const mailerBlocked = message.includes("rate limit")
+              || message.includes("for security purposes")
+              || message.includes("email")
+              || message.includes("smtp")
+              || message.includes("sending");
+            if (mailerBlocked) {
+              const localAccount = { ...account, password: cleanPassword };
+              saveAccount(localAccount);
+              onLogin(localAccount);
+              return;
+            }
             setError(friendlyAuthError(signUpError.message));
             return;
           }
@@ -961,6 +996,7 @@ function Login({ onLogin, onBack, initialError }: { onLogin: (account: StudentAc
         </aside>
         <div className="login-card">
           <Logo />
+          {invitedRoom && <div className="invite-banner"><span>YOU ARE INVITED</span><h3>{invitedRoom.topic || "Study room"}</h3><p>{invitedRoom.mode} room · code {invitedRoom.room}. Create an account or log in below and you will land straight in the room.</p></div>}
           <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Check your email."}</h1><p>{mode === "login" ? "Enter your email and password. Confirmed accounts go straight in." : mode === "signup" ? "Sign up first. Confirm your email once, then log in with your password." : isSupabaseConfigured ? `Click the Supabase email link sent to ${pendingAccount?.email || email}.` : `A verification link is prepared for ${pendingAccount?.email || email}.`}</p></div>
           {mode !== "verify" && <div className="auth-tabs" role="group" aria-label="Login mode">
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
@@ -1749,13 +1785,15 @@ export default function Home() {
   const [studySessions, setStudySessions] = useState<StudySession[]>(() => readStoredJson(STUDY_SESSIONS_KEY, []));
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(() => readStoredJson(QUIZ_ATTEMPTS_KEY, []));
   const [authError, setAuthError] = useState("");
+  const [invitedRoom, setInvitedRoom] = useState<{ room: string; topic: string; mode: "Study" | "Competition" } | null>(null);
 
   const login = useCallback((account: StudentAccount) => {
     setCurrentUser(account);
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(account));
     setAuthError("");
     setScreen("app");
-    setView("dashboard");
+    // An invited friend should land in the room they were sent to, not the dashboard.
+    setView(readRoomFromUrl() ? "studyroom" : "dashboard");
   }, []);
   // Clearing the screen is not a logout: without signOut() the Supabase session survives
   // in localStorage and the next reload silently signs the student back in.
@@ -1785,6 +1823,13 @@ export default function Home() {
     if (linkError) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAuthError(linkError);
+      setScreen("login");
+    }
+    // Arriving on an invite link: skip the marketing page and go straight to sign-in,
+    // so the friend sees the invitation instead of a homepage they have to decode.
+    const room = readRoomFromUrl();
+    if (room) {
+      setInvitedRoom(room);
       setScreen("login");
     }
     if (!supabase) return;
@@ -1858,7 +1903,7 @@ export default function Home() {
   const dashboardLearningAction = () => runLearningAction("Simplify");
 
   if (screen === "landing") return <Landing onStart={() => setScreen("login")} onDemo={quickDemo} theme={theme} toggleTheme={toggleTheme} />;
-  if (screen === "login") return <Login onLogin={login} onBack={() => { setAuthError(""); setScreen("landing"); }} initialError={authError} />;
+  if (screen === "login") return <Login onLogin={login} onBack={() => { setAuthError(""); setScreen("landing"); }} initialError={authError} invitedRoom={invitedRoom} />;
 
   return (
     <div className={`app-shell ${calm ? "calm" : ""}`}>
