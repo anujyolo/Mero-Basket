@@ -234,6 +234,48 @@ function getTopic(content: string) {
   return keywords.length ? keywords.slice(0, 2).join(" and ") : "Your lesson";
 }
 
+function ensureFiveQuizQuestions(analysis: LessonAnalysis) {
+  const topic = analysis.mainTopic || "this topic";
+  const summary = truncateText(analysis.summary || analysis.simpleExplanation || `${topic} is the topic being checked.`, 140);
+  const keyPoint = analysis.keyPoints[0] || `A key feature of ${topic}`;
+  const secondPoint = analysis.keyPoints[1] || keyPoint;
+  const example = truncateText(analysis.examples[0] || `A useful example should directly show how ${topic} works.`, 140);
+  const extraQuestions: QuizQuestion[] = [
+    {
+      question: `Which statement best explains ${topic}?`,
+      options: [summary, `${topic} is unrelated to the lesson`, `${topic} has no important parts`],
+      answer: 0,
+      explanation: `The correct answer explains ${topic} directly.`,
+    },
+    {
+      question: `Which detail belongs to ${topic}?`,
+      options: [keyPoint, `A detail from a different topic`, `A label without meaning`],
+      answer: 0,
+      explanation: `The correct detail is part of ${topic}.`,
+    },
+    {
+      question: `Which example supports ${topic}?`,
+      options: [example, `An example about a different subject`, `An example that ignores ${topic}`],
+      answer: 0,
+      explanation: `A good example must show ${topic}.`,
+    },
+    {
+      question: `What should be true in an explanation of ${topic}?`,
+      options: [`It should mention the important parts of ${topic}`, "It should change to another topic", "It should avoid the topic"],
+      answer: 0,
+      explanation: `A correct explanation stays on ${topic}.`,
+    },
+    {
+      question: `Which phrase is most connected to ${topic}?`,
+      options: [secondPoint, "A random unrelated phrase", "Only a page number"],
+      answer: 0,
+      explanation: `The correct phrase is connected to ${topic}.`,
+    },
+  ];
+  const quiz = [...analysis.quiz, ...extraQuestions].filter((question, index, list) => list.findIndex((item) => item.question === question.question) === index).slice(0, 5);
+  return { ...analysis, quiz } satisfies LessonAnalysis;
+}
+
 function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
   const loweredAction = action.toLowerCase();
   const wantsSimple = /simpl/.test(loweredAction);
@@ -477,7 +519,7 @@ export async function POST(request: NextRequest) {
     const textbookContext = await getSafeBookSearchContext(content);
 
     if (textbookContext.mode === "GENERAL" && (isDemandCurveTopic(content) || isAccountingTopic(content))) {
-      const analysis = isDemandCurveTopic(content) ? getDemandCurveAnalysis() : getAccountingAnalysis();
+      const analysis = ensureFiveQuizQuestions(isDemandCurveTopic(content) ? getDemandCurveAnalysis() : getAccountingAnalysis());
       return NextResponse.json({
         mode: "DEMO_AI",
         preferencesApplied: body.preferences,
@@ -519,20 +561,22 @@ Return only one JSON object with this exact shape:
   "learningSteps": ["3 to 5 concise study steps"],
   "quiz": [
     {
-      "question": "one question",
+      "question": "topic-specific question 1 of exactly 5",
       "options": ["three short options"],
       "answer": 0,
       "explanation": "one short explanation"
     }
   ]
-}`;
+}
+
+The quiz array must contain exactly 5 topic-specific questions. Do not ask study-habit questions unless the requested topic is study habits.`;
 
         const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: process.env.OPENAI_MODEL || "gpt-5.6",
-          max_output_tokens: 650,
+          max_output_tokens: 900,
           input: [
             { role: "developer", content: [{ type: "input_text", text: developerPrompt }] },
             { role: "user", content: [{ type: "input_text", text: `Student question / lesson:\n${content}${textbookText}` }] },
@@ -555,8 +599,8 @@ Return only one JSON object with this exact shape:
                   learningSteps: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 5 },
                   quiz: {
                     type: "array",
-                    minItems: 3,
-                    maxItems: 3,
+                    minItems: 5,
+                    maxItems: 5,
                     items: {
                       type: "object",
                       additionalProperties: false,
@@ -580,7 +624,7 @@ Return only one JSON object with this exact shape:
           const openAIData = await openAIResponse.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
           const outputText = openAIData.output_text || openAIData.output?.flatMap((item) => item.content || []).map((item) => item.text || "").join("");
           if (outputText) {
-            const analysis = JSON.parse(outputText) as LessonAnalysis;
+            const analysis = ensureFiveQuizQuestions(JSON.parse(outputText) as LessonAnalysis);
             return NextResponse.json({
               mode: "LIVE_AI",
               preferencesApplied: body.preferences,
@@ -597,7 +641,7 @@ Return only one JSON object with this exact shape:
     }
 
     if (textbookContext.mode === "TEXTBOOK") {
-      const analysis = buildTextbookAnalysis(content, textbookContext);
+      const analysis = ensureFiveQuizQuestions(buildTextbookAnalysis(content, textbookContext));
       return NextResponse.json({
         mode: "DEMO_AI",
         preferencesApplied: body.preferences,
@@ -610,7 +654,7 @@ Return only one JSON object with this exact shape:
 
     const isPhotosynthesis = /photosynthesis|chlorophyll/i.test(content);
     if (isPhotosynthesis) {
-      const analysis = getPhotosynthesisAnalysis();
+      const analysis = ensureFiveQuizQuestions(getPhotosynthesisAnalysis());
       const result = attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext);
       return NextResponse.json({
         mode: "DEMO_AI",
@@ -622,7 +666,7 @@ Return only one JSON object with this exact shape:
       });
     }
 
-    const analysis = buildLocalAnalysis(content);
+    const analysis = ensureFiveQuizQuestions(buildLocalAnalysis(content));
     return NextResponse.json({
       mode: "DEMO_AI",
       preferencesApplied: body.preferences,

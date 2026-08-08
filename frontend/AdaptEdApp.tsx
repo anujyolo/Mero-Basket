@@ -96,9 +96,19 @@ type RoutineItem = {
   time: string;
 };
 
+type QuizAttempt = {
+  id: string;
+  topic: string;
+  score: number;
+  total: number;
+  date: string;
+  questions: string[];
+};
+
 const ANALYSIS_CACHE_KEY = "adapted-analysis-cache-v4";
 const STUDY_SESSIONS_KEY = "adapted-study-sessions-v1";
 const ROUTINE_KEY = "adapted-routine-v1";
+const QUIZ_ATTEMPTS_KEY = "adapted-quiz-attempts-v1";
 
 function readStoredJson<T>(key: string, fallback: T) {
   if (typeof window === "undefined") return fallback;
@@ -174,6 +184,18 @@ const demoQuiz: QuizQuestion[] = [
     options: ["Roots", "Chlorophyll", "Glucose"],
     answer: 1,
     explanation: "Chlorophyll is the green pigment that captures light energy.",
+  },
+  {
+    question: "What are the main raw materials of photosynthesis?",
+    options: ["Water and carbon dioxide", "Oxygen and glucose", "Soil and oxygen"],
+    answer: 0,
+    explanation: "Plants use water and carbon dioxide, with light energy, to make glucose.",
+  },
+  {
+    question: "What useful gas is released during photosynthesis?",
+    options: ["Oxygen", "Nitrogen", "Carbon monoxide"],
+    answer: 0,
+    explanation: "Oxygen is released as a product of photosynthesis.",
   },
 ];
 
@@ -255,6 +277,18 @@ function accountingQuiz(topic = "Accounting") {
         answer: 0,
         explanation: "The accounting equation is the base for preparing financial records.",
       },
+      {
+        question: "What is a ledger used for?",
+        options: ["Grouping transactions by account", "Writing poems", "Finding plant species"],
+        answer: 0,
+        explanation: "A ledger organizes journal entries into individual accounts.",
+      },
+      {
+        question: "What does a journal entry record?",
+        options: ["The debit and credit effect of a transaction", "Only the date of an exam", "Only a paragraph summary"],
+        answer: 0,
+        explanation: "Journal entries show which accounts are debited and credited.",
+      },
     ] satisfies QuizQuestion[],
   };
 }
@@ -282,8 +316,61 @@ function demandCurveQuiz() {
         answer: 0,
         explanation: "A downward slope means consumers generally buy more at lower prices and less at higher prices.",
       },
+      {
+        question: "Which axis usually shows price on a demand curve?",
+        options: ["Vertical axis", "Horizontal axis", "No axis"],
+        answer: 0,
+        explanation: "Price is usually shown on the vertical axis and quantity demanded on the horizontal axis.",
+      },
+      {
+        question: "What does movement along a demand curve usually show?",
+        options: ["A change in quantity demanded because price changed", "A change in weather only", "A change in the number of schools"],
+        answer: 0,
+        explanation: "Movement along the curve happens when price changes and quantity demanded changes.",
+      },
     ] satisfies QuizQuestion[],
   };
+}
+
+function normalizeFiveQuestionQuiz(questions: QuizQuestion[], topic: string, result?: LessonResult | null) {
+  const cleanTopic = cleanText(topic, "this topic");
+  const summary = cleanText(result?.summary || `${cleanTopic} is the main concept being checked.`);
+  const needs = result?.needs?.length ? result.needs : ["definition", "key feature", "example"];
+  const example = cleanText(result?.example || `A useful example should directly show how ${cleanTopic} works.`);
+  const extras: QuizQuestion[] = [
+    {
+      question: `Which statement best explains ${cleanTopic}?`,
+      options: [summary.slice(0, 140), `${cleanTopic} is unrelated to the lesson`, `${cleanTopic} has no important parts`],
+      answer: 0,
+      explanation: `The correct answer explains ${cleanTopic} directly.`,
+    },
+    {
+      question: `Which detail belongs to ${cleanTopic}?`,
+      options: [needs[0] || `A key feature of ${cleanTopic}`, `A detail from a different topic`, `A label without meaning`],
+      answer: 0,
+      explanation: `The correct detail is part of ${cleanTopic}.`,
+    },
+    {
+      question: `Which example supports ${cleanTopic}?`,
+      options: [example.slice(0, 140), `An example about a different subject`, `An example that ignores ${cleanTopic}`],
+      answer: 0,
+      explanation: `A good example must show ${cleanTopic}.`,
+    },
+    {
+      question: `What should be true in an explanation of ${cleanTopic}?`,
+      options: [`It should mention the important parts of ${cleanTopic}`, "It should change to another topic", "It should avoid the topic"],
+      answer: 0,
+      explanation: `A correct explanation stays on ${cleanTopic}.`,
+    },
+    {
+      question: `Which phrase is most connected to ${cleanTopic}?`,
+      options: [needs[1] || needs[0] || cleanTopic, "A random unrelated phrase", "Only a page number"],
+      answer: 0,
+      explanation: `The correct phrase is connected to ${cleanTopic}.`,
+    },
+  ];
+  const uniqueQuestions = [...questions, ...extras].filter((question, index, list) => list.findIndex((item) => item.question === question.question) === index);
+  return uniqueQuestions.slice(0, 5);
 }
 
 function makeFlashcards(lessonInput: string, result?: LessonResult | null) {
@@ -334,7 +421,7 @@ function makeQuiz(lessonInput: string, result?: LessonResult | null) {
       explanation: `A useful example must directly show how ${topic} works.`,
     },
   ];
-  return { title: `${topic} quick quiz`, review: needs[0] || "main idea", questions };
+  return { title: `${topic} quick quiz`, review: needs[0] || "main idea", questions: normalizeFiveQuestionQuiz(questions, topic, result) };
 }
 
 function buildResultFromAnalysis(analysis: LessonAnalysis, action: string) {
@@ -535,7 +622,7 @@ function Login({ onLogin, onBack }: { onLogin: (email: string, password: string)
   );
 }
 
-function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode }: { title: string; calm: boolean; setCalm: (v: boolean) => void; theme: string; toggleTheme: () => void; onMenu: () => void; aiMode: "checking" | "live" | "demo" }) {
+function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onHistory }: { title: string; calm: boolean; setCalm: (v: boolean) => void; theme: string; toggleTheme: () => void; onMenu: () => void; aiMode: "checking" | "live" | "demo"; onHistory: () => void }) {
   return (
     <header className="app-header">
       <button className="icon-button mobile-menu" onClick={onMenu} aria-label="Open navigation">☰</button>
@@ -544,9 +631,44 @@ function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode }: { 
         <span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "checking" ? "Checking Adapt…" : aiMode === "live" ? "Adapt AI live" : "Adapt demo ready"}</span>
         <label className="calm-toggle"><input type="checkbox" checked={calm} onChange={(e) => setCalm(e.target.checked)} /><span className="switch" /><b>Calm mode</b></label>
         <button className="icon-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>{theme === "light" ? "☾" : "☀"}</button>
-        <div className="avatar" aria-label="Profile for Anuj">A</div>
+        <button className="avatar profile-button" onClick={onHistory} aria-label="Open Anuj history">A</button>
       </div>
     </header>
+  );
+}
+
+function HistoryPanel({ open, onClose, quizAttempts, studySessions, setView }: { open: boolean; onClose: () => void; quizAttempts: QuizAttempt[]; studySessions: StudySession[]; setView: (view: View) => void }) {
+  if (!open) return null;
+  const totalQuizzes = quizAttempts.length;
+  const averageScore = totalQuizzes ? Math.round((quizAttempts.reduce((sum, attempt) => sum + attempt.score / attempt.total, 0) / totalQuizzes) * 100) : 0;
+  const totalStudySeconds = studySessions.reduce((sum, session) => sum + session.durationSeconds, 0);
+  return (
+    <div className="history-layer" role="dialog" aria-modal="true" aria-label="Anuj learning history">
+      <button className="history-backdrop" onClick={onClose} aria-label="Close history" />
+      <aside className="history-panel">
+        <div className="history-head">
+          <div><span className="eyebrow"><i /> ANUJ HISTORY</span><h2>All activity</h2></div>
+          <button className="icon-button" onClick={onClose} aria-label="Close history">×</button>
+        </div>
+        <div className="history-stats">
+          <div><b>{totalQuizzes}</b><span>Quizzes</span></div>
+          <div><b>{averageScore}%</b><span>Average</span></div>
+          <div><b>{formatDuration(totalStudySeconds)}</b><span>Focus time</span></div>
+        </div>
+        <section>
+          <div className="history-title"><h3>Quiz history</h3><button onClick={() => { setView("quiz"); onClose(); }}>Open quiz</button></div>
+          <div className="history-list">
+            {quizAttempts.length ? quizAttempts.slice(0, 12).map((attempt) => <article key={attempt.id}><b>{attempt.topic}</b><span>{attempt.score}/{attempt.total} · {new Date(attempt.date).toLocaleString()}</span><small>{attempt.questions.slice(0, 2).join(" • ")}</small></article>) : <p>No quiz attempts yet. Complete a 5-question quiz and it will appear here.</p>}
+          </div>
+        </section>
+        <section>
+          <div className="history-title"><h3>Study history</h3><button onClick={() => { setView("progress"); onClose(); }}>Open progress</button></div>
+          <div className="history-list">
+            {studySessions.length ? studySessions.slice(0, 10).map((session) => <article key={session.id}><b>{session.topic}</b><span>{formatDuration(session.durationSeconds)} · {session.date}</span><small>{session.startedAt ? new Date(session.startedAt).toLocaleTimeString() : "Focus session"}</small></article>) : <p>No focus sessions tracked yet. Finish a Focus timer to add study history.</p>}
+          </div>
+        </section>
+      </aside>
+    </div>
   );
 }
 
@@ -653,34 +775,46 @@ function LessonResultCard({ result, action, onAction, onQuiz }: { result: Lesson
   );
 }
 
-function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview }: { lessonInput: string; lessonResult: LessonResult | null; lessonAnalysis: LessonAnalysis | null; onReview: () => void }) {
+function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview, onComplete }: { lessonInput: string; lessonResult: LessonResult | null; lessonAnalysis: LessonAnalysis | null; onReview: () => void; onComplete: (attempt: QuizAttempt) => void }) {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
   const quiz = useMemo(() => {
     if (lessonAnalysis?.quiz?.length) {
+      const topic = lessonAnalysis.mainTopic;
       return {
-        title: `${lessonAnalysis.mainTopic} quick quiz`,
+        title: `${topic} quick quiz`,
         review: lessonAnalysis.keyPoints[0] || "main idea",
-        questions: lessonAnalysis.quiz,
+        questions: normalizeFiveQuestionQuiz(lessonAnalysis.quiz, topic, lessonResult),
       };
     }
     return makeQuiz(lessonInput, lessonResult);
   }, [lessonAnalysis, lessonInput, lessonResult]);
   const score = quiz.questions.reduce((n, q, i) => n + (answers[i] === q.answer ? 1 : 0), 0);
   const perfectScore = score === quiz.questions.length;
+  function submitQuiz() {
+    setSubmitted(true);
+    onComplete({
+      id: `${new Date().toISOString()}-${quiz.title}`,
+      topic: quiz.title.replace(/\s+quick quiz$/i, ""),
+      score,
+      total: quiz.questions.length,
+      date: new Date().toISOString(),
+      questions: quiz.questions.map((question) => question.question),
+    });
+  }
   return (
     <section className="quiz-card">
-      <div className="card-title"><div><span className="eyebrow"><i /> 3 QUESTION CHECK</span><h2>{quiz.title}</h2></div><span className="preference-chip">No time limit</span></div>
+      <div className="card-title"><div><span className="eyebrow"><i /> 5 QUESTION CHECK</span><h2>{quiz.title}</h2></div><span className="preference-chip">No time limit</span></div>
       {quiz.questions.map((q, i) => <fieldset key={q.question} className="question"><legend><span>{i + 1}</span>{q.question}</legend>{q.options.map((option, oi) => <label className={`${submitted ? oi === q.answer ? "correct" : answers[i] === oi ? "incorrect" : "" : ""}`} key={option}><input type="radio" name={`q-${i}`} checked={answers[i] === oi} onChange={() => !submitted && setAnswers((a) => ({ ...a, [i]: oi }))} />{option}{submitted && oi === q.answer && <b>Correct</b>}</label>)}{submitted && <p className="explanation">{q.explanation}</p>}</fieldset>)}
-      {!submitted ? <button type="button" className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={() => setSubmitted(true)}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{perfectScore ? "🎉 Great work! You answered all questions correctly. No weak area was detected in this quiz." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>Main idea · Check</b>{perfectScore ? <b>No weak area detected</b> : <b>{quiz.review} · Review</b>}</div>{!perfectScore && <button type="button" className="button primary" onClick={onReview}>Review weak area →</button>}<button type="button" className="button primary" onClick={() => { setAnswers({}); setSubmitted(false); }}>{perfectScore ? "Practice harder questions" : "Try again"}</button><button type="button" className="button" onClick={onReview}>{perfectScore ? "Review key points" : "Explain differently"}</button></div>}
+      {!submitted ? <button type="button" className="button primary" disabled={Object.keys(answers).length < quiz.questions.length} onClick={submitQuiz}>Check my answers</button> : <div className="score-panel"><span>SCORE</span><strong>{score} / {quiz.questions.length}</strong><p>{perfectScore ? "🎉 Great work! You answered all questions correctly. No weak area was detected in this quiz." : `Good start. Review ${quiz.review} next.`}</p><div className="knowledge-row"><b>{quiz.title.replace(/\s+quick quiz$/i, "")} · Check</b>{perfectScore ? <b>No weak area detected</b> : <b>{quiz.review} · Review</b>}</div>{!perfectScore && <button type="button" className="button primary" onClick={onReview}>Review weak area →</button>}<button type="button" className="button primary" onClick={() => { setAnswers({}); setSubmitted(false); }}>{perfectScore ? "Practice harder questions" : "Try again"}</button><button type="button" className="button" onClick={onReview}>{perfectScore ? "Review key points" : "Explain differently"}</button></div>}
     </section>
   );
 }
 
-function LearnPage({ lessonInput, setLessonInput, result, lessonAnalysis, loading, stage, runAction, showQuiz, setShowQuiz }: { lessonInput: string; setLessonInput: (v: string) => void; result: LessonResult | null; lessonAnalysis: LessonAnalysis | null; loading: boolean; stage: number; runAction: (a: string) => void; showQuiz: boolean; setShowQuiz: (v: boolean) => void }) {
+function LearnPage({ lessonInput, setLessonInput, result, lessonAnalysis, loading, stage, runAction, showQuiz, setShowQuiz, onQuizComplete }: { lessonInput: string; setLessonInput: (v: string) => void; result: LessonResult | null; lessonAnalysis: LessonAnalysis | null; loading: boolean; stage: number; runAction: (a: string) => void; showQuiz: boolean; setShowQuiz: (v: boolean) => void; onQuizComplete: (attempt: QuizAttempt) => void }) {
   const [action, setAction] = useState("Simplify");
   const run = (a = action) => { setAction(a); runAction(a); setShowQuiz(false); };
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Adapt my lesson</h2><p>Paste a question, paragraph, or topic. Adapt first checks your books, then gives a clear explanation that matches your learning style.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Adaptation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Adapt for me</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard lessonInput={lessonInput} lessonResult={result} lessonAnalysis={lessonAnalysis} onReview={() => { setShowQuiz(false); run("Explain deeply"); }} />}</div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Adapt my lesson</h2><p>Paste a question, paragraph, or topic. Adapt first checks your books, then gives a clear explanation that matches your learning style.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Adaptation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Adapt for me</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard lessonInput={lessonInput} lessonResult={result} lessonAnalysis={lessonAnalysis} onReview={() => { setShowQuiz(false); run("Explain deeply"); }} onComplete={onQuizComplete} />}</div>;
 }
 
 function AssignmentsPage({ calm }: { calm: boolean }) {
@@ -1031,9 +1165,11 @@ export default function Home() {
   const [showQuiz, setShowQuiz] = useState(false);
   const [aiMode, setAiMode] = useState<"checking" | "live" | "demo">("checking");
   const [helperOpen, setHelperOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [analysisCache, setAnalysisCache] = useState<Record<string, LessonAnalysis>>(() => readStoredJson(ANALYSIS_CACHE_KEY, {}));
   const [focusState, setFocusState] = useState<FocusState>(() => readStoredJson("adapted-focus-state", { mode: "focus", duration: 15, seconds: 15 * 60, running: false }));
   const [studySessions, setStudySessions] = useState<StudySession[]>(() => readStoredJson(STUDY_SESSIONS_KEY, []));
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(() => readStoredJson(QUIZ_ATTEMPTS_KEY, []));
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("adapted-theme");
@@ -1055,11 +1191,17 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(STUDY_SESSIONS_KEY, JSON.stringify(studySessions));
   }, [studySessions]);
+  useEffect(() => {
+    localStorage.setItem(QUIZ_ATTEMPTS_KEY, JSON.stringify(quizAttempts));
+  }, [quizAttempts]);
 
   const title = useMemo(() => navItems.find((n) => n.id === view)?.label || (view === "settings" ? "Settings" : "AdaptEd"), [view]);
   const toggleTheme = () => setTheme((t) => t === "light" ? "dark" : "light");
   const recordStudySession = useCallback((session: StudySession) => {
     setStudySessions((current) => current.some((item) => item.id === session.id) ? current : [session, ...current].slice(0, 100));
+  }, []);
+  const recordQuizAttempt = useCallback((attempt: QuizAttempt) => {
+    setQuizAttempts((current) => current.some((item) => item.id === attempt.id) ? current : [attempt, ...current].slice(0, 100));
   }, []);
   function login() { setScreen("app"); setView("dashboard"); }
   function quickDemo() { login(); }
@@ -1106,11 +1248,11 @@ export default function Home() {
       <Sidebar view={view} setView={setView} calm={calm} open={menuOpen} close={() => setMenuOpen(false)} logout={() => setScreen("landing")} />
       {menuOpen && <button className="nav-overlay" onClick={() => setMenuOpen(false)} aria-label="Close navigation overlay" />}
       <div className="app-main">
-        <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} />
+        <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} onHistory={() => setHistoryOpen(true)} />
         {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardAdapt} lessonResult={lessonResult} />}
-        {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} lessonAnalysis={lessonAnalysis} loading={loading} stage={stage} runAction={runAdapt} showQuiz={showQuiz} setShowQuiz={setShowQuiz} />}
+        {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} lessonAnalysis={lessonAnalysis} loading={loading} stage={stage} runAction={runAdapt} showQuiz={showQuiz} setShowQuiz={setShowQuiz} onQuizComplete={recordQuizAttempt} />}
         {view === "assignments" && <AssignmentsPage calm={calm} />}
-        {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runAdapt("Explain deeply")} /></div>}
+        {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runAdapt("Explain deeply")} onComplete={recordQuizAttempt} /></div>}
         {view === "planner" && <PlannerPage />}
         {view === "flashcards" && <FlashcardsPage lessonInput={lessonInput} lessonResult={lessonResult} />}
         {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} onSessionComplete={recordStudySession} />}
@@ -1122,6 +1264,7 @@ export default function Home() {
         {view === "settings" && <SettingsPage theme={theme} toggleTheme={toggleTheme} calm={calm} setCalm={setCalm} aiMode={aiMode} />}
       </div>
       <AdaptHelper open={helperOpen} setOpen={setHelperOpen} setView={setView} />
+      <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} />
     </div>
   );
 }

@@ -97,6 +97,7 @@ test("creates topic-specific demand curve quiz questions", async () => {
   assert.equal(response.status, 200);
   const data = await response.json();
   assert.match(data.analysis.mainTopic, /Demand curve/i);
+  assert.equal(data.analysis.quiz.length, 5);
   assert.match(JSON.stringify(data.analysis.quiz), /price|quantity demanded|law of demand/i);
   assert.doesNotMatch(JSON.stringify(data.analysis.quiz), /Only the longest word|The page number|main idea in the lesson/i);
 });
@@ -119,6 +120,7 @@ test("fallback quiz stays on the requested topic", async () => {
   assert.equal(response.status, 200);
   const data = await response.json();
   const quiz = JSON.stringify(data.analysis.quiz);
+  assert.equal(data.analysis.quiz.length, 5);
   assert.match(quiz, /Migration|movement|people|place/i);
   assert.doesNotMatch(quiz, /Only the longest word|The page number|Skip to a new topic|Memorize without checking|What is a useful study step/i);
 });
