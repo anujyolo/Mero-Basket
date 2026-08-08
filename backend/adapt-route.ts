@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBookSearchContext, type TextbookContext, type TextbookSource } from "./textbooks";
 
 // Server-only lesson adaptation endpoint. API credentials never reach the browser.
 
@@ -6,6 +7,7 @@ type RequestBody = {
   action?: string;
   content?: string;
   preferences?: { explanation?: string; tools?: string[]; interface?: string };
+  subjectHint?: string;
 };
 
 type QuizQuestion = {
@@ -32,6 +34,9 @@ type LessonResult = {
   steps: string[];
   result: string;
   example: string;
+  sourceMode?: "TEXTBOOK" | "GENERAL";
+  sourceNote?: string;
+  sources?: TextbookSource[];
 };
 
 const stopWords = new Set([
@@ -99,6 +104,10 @@ function splitSentences(content: string) {
 
 function truncateText(text: string, max = 180) {
   return text.length > max ? `${text.slice(0, max - 3).trimEnd()}...` : text;
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function getKeywords(content: string) {
@@ -249,6 +258,67 @@ function buildLocalAnalysis(content: string) {
   } satisfies LessonAnalysis;
 }
 
+function buildTextbookAnalysis(content: string, textbookContext: TextbookContext) {
+  const topic = getTopic(content);
+  const subjectLabel = textbookContext.subjectHint || topic;
+  const sourceLines = textbookContext.sources.map((source) => `${source.subject} — ${source.title}, ${source.pages}`);
+  const firstExcerpt = textbookContext.sources[0]?.excerpt || content;
+  const secondExcerpt = textbookContext.sources[1]?.excerpt || firstExcerpt;
+  const keyPoints = unique(
+    [...getKeywords(`${content} ${textbookContext.sources.map((source) => source.excerpt).join(" ")}`), topic, ...textbookContext.sources.flatMap((source) => [source.subject, source.pages])]
+      .filter(Boolean)
+      .slice(0, 6),
+  );
+
+  return {
+    mainTopic: topic,
+    summary: `Based on your textbook, ${topic} is explained like this: ${truncateText(firstExcerpt, 180)}${textbookContext.sources.length > 1 ? ` Additional pages also mention ${truncateText(secondExcerpt, 80)}.` : ""}`,
+    simpleExplanation: `In your textbook, ${topic} is explained like this: ${truncateText(firstExcerpt, 160)}`,
+    keyPoints: (keyPoints.length ? keyPoints : [topic, "Textbook section", "Key ideas"]).slice(0, 6),
+    examples: textbookContext.sources.length
+      ? [
+          `Use the textbook passage from ${sourceLines[0]} as your main reference for ${subjectLabel}.`,
+          `If needed, compare it with ${sourceLines[1] || sourceLines[0]} for extra detail.`,
+        ]
+      : [`Use the textbook section on ${topic} to explain the idea in your own words.`],
+    learningSteps: [
+      `Read the textbook section about ${subjectLabel}.`,
+      `Underline the key ideas and important terms.`,
+      `Rewrite the meaning in one or two simple sentences.`,
+      `Use the page reference to study the same section again if needed.`,
+    ],
+    quiz: [
+      {
+        question: `What should you do first when studying ${topic} from the textbook?`,
+        options: ["Read the relevant section", "Ignore the source", "Memorize only the heading"],
+        answer: 0,
+        explanation: "Start with the textbook section so the rest makes sense.",
+      },
+      {
+        question: "How should you use the source pages?",
+        options: ["As your main reference", "As decoration only", "To replace the question"],
+        answer: 0,
+        explanation: "The source pages tell you where the answer came from.",
+      },
+      {
+        question: "What helps you understand the topic better?",
+        options: ["Explaining it in your own words", "Skipping the page", "Only reading the title"],
+        answer: 0,
+        explanation: "Restating the idea proves you understood it.",
+      },
+    ],
+  } satisfies LessonAnalysis;
+}
+
+function attachSourceInfo(result: LessonResult, textbookContext: TextbookContext) {
+  return {
+    ...result,
+    sourceMode: textbookContext.mode,
+    sourceNote: textbookContext.mode === "TEXTBOOK" ? "Based on your textbook" : "General AI explanation — not directly from your textbook",
+    sources: textbookContext.sources,
+  };
+}
+
 function getPhotosynthesisAnalysis() {
   return {
     mainTopic: "Photosynthesis",
@@ -297,6 +367,7 @@ export async function POST(request: NextRequest) {
 
     const action = body.action || "Simplify";
     const apiKey = process.env.OPENAI_API_KEY;
+    const textbookContext = await getBookSearchContext(content);
 
     if (apiKey) {
       const preferenceText = [
@@ -304,6 +375,9 @@ export async function POST(request: NextRequest) {
         `Helpful tools: ${(body.preferences?.tools || []).join(", ") || "Examples and key points"}`,
         `Interface preference: ${body.preferences?.interface || "Normal"}`,
       ].join("\n");
+      const textbookText = textbookContext.sources.length
+        ? `\nTextbook excerpts you should use first:\n${textbookContext.sources.map((source, index) => `${index + 1}. ${source.subject} — ${source.title}, ${source.pages}\n${source.excerpt}`).join("\n\n")}\n`
+        : "\nNo relevant textbook excerpt was found. If you answer generally, say that it is not directly from the uploaded textbook.\n";
       const developerPrompt = `You are Adapt, a precise and encouraging educational assistant for students of different ages and learning preferences.
 
 Adapt the supplied educational material without removing facts or changing its educational meaning. Use age-neutral, respectful language. Never diagnose autism, ADHD, dyslexia, a learning disability, intelligence, or any medical or psychological condition. Never infer a condition from preferences, answers, or scores. Do not use guilt, shame, or infantilizing language.
@@ -312,6 +386,8 @@ Student preferences:
 ${preferenceText}
 
 Requested action: ${action}
+
+${textbookContext.sources.length ? "The answer should be grounded in the textbook excerpts below. Do not invent book sources or pages." : "If you cannot find the answer in the textbook excerpts, clearly say so."}
 
 Return only one JSON object with this exact shape:
 {
@@ -339,7 +415,7 @@ Return only one JSON object with this exact shape:
           max_output_tokens: 650,
           input: [
             { role: "developer", content: [{ type: "input_text", text: developerPrompt }] },
-            { role: "user", content: [{ type: "input_text", text: content }] },
+            { role: "user", content: [{ type: "input_text", text: `Student question / lesson:\n${content}${textbookText}` }] },
           ],
           text: {
             format: {
@@ -385,19 +461,41 @@ Return only one JSON object with this exact shape:
         const outputText = openAIData.output_text || openAIData.output?.flatMap((item) => item.content || []).map((item) => item.text || "").join("");
         if (outputText) {
           const analysis = JSON.parse(outputText) as LessonAnalysis;
-          return NextResponse.json({ mode: "LIVE_AI", preferencesApplied: body.preferences, analysis, result: buildResultFromAnalysis(analysis, action) });
+          return NextResponse.json({
+            mode: "LIVE_AI",
+            preferencesApplied: body.preferences,
+            textbookMode: textbookContext.mode,
+            textbookSources: textbookContext.sources,
+            analysis,
+            result: attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext),
+          });
         }
       }
+    }
+
+    if (textbookContext.mode === "TEXTBOOK") {
+      const analysis = buildTextbookAnalysis(content, textbookContext);
+      return NextResponse.json({
+        mode: "DEMO_AI",
+        preferencesApplied: body.preferences,
+        textbookMode: textbookContext.mode,
+        textbookSources: textbookContext.sources,
+        analysis,
+        result: attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext),
+      });
     }
 
     const isPhotosynthesis = /photosynthesis|chlorophyll/i.test(content);
     if (isPhotosynthesis) {
       const analysis = getPhotosynthesisAnalysis();
+      const result = attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext);
       return NextResponse.json({
         mode: "DEMO_AI",
         preferencesApplied: body.preferences,
+        textbookMode: textbookContext.mode,
+        textbookSources: textbookContext.sources,
         analysis,
-        result: buildResultFromAnalysis(analysis, action),
+        result,
       });
     }
 
@@ -405,8 +503,10 @@ Return only one JSON object with this exact shape:
     return NextResponse.json({
       mode: "DEMO_AI",
       preferencesApplied: body.preferences,
+      textbookMode: textbookContext.mode,
+      textbookSources: textbookContext.sources,
       analysis,
-      result: buildResultFromAnalysis(analysis, action),
+      result: attachSourceInfo(buildResultFromAnalysis(analysis, action), textbookContext),
     });
   } catch {
     return NextResponse.json({ error: "Unable to process this lesson." }, { status: 500 });

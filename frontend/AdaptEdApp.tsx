@@ -36,6 +36,9 @@ type LessonResult = {
   steps: string[];
   result: string;
   example: string;
+  sourceMode?: "TEXTBOOK" | "GENERAL";
+  sourceNote?: string;
+  sources?: { subject: string; title: string; book: string; pages: string; excerpt: string }[];
 };
 
 type LessonAnalysis = {
@@ -51,6 +54,20 @@ type LessonAnalysis = {
 type AdaptResponse = {
   result: LessonResult;
   analysis?: LessonAnalysis;
+  textbookMode?: "TEXTBOOK" | "GENERAL";
+  textbookSources?: { subject: string; title: string; book: string; pages: string; excerpt: string }[];
+};
+
+type BookLibraryItem = {
+  id: string;
+  subject: string;
+  title: string;
+  status: "Indexed" | "Not Indexed";
+  fileUrl: string | null;
+  sourceUrl: string | null;
+  canOpen: boolean;
+  canReplace: boolean;
+  canRemove: boolean;
 };
 
 type FocusState = {
@@ -116,7 +133,7 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "routine", label: "Routine", icon: "◷" },
   { id: "communicate", label: "Ask for help", icon: "◌" },
   { id: "progress", label: "Progress", icon: "↗" },
-  { id: "resources", label: "Grade 11 books", icon: "▣" },
+  { id: "resources", label: "My Books", icon: "▣" },
   { id: "preferences", label: "Learning style", icon: "⚙" },
 ];
 
@@ -163,14 +180,15 @@ const flashcards = [
 const grade11Materials = [
   { subject: "Mathematics", title: "Class 11 Mathematics", kind: "Included PDF", href: "/study_materials/03_Mathematics_Class_11.pdf" },
   { subject: "Biology", title: "Class 11 Biology", kind: "Included PDF", href: "/study_materials/04_Biology_Class_11.pdf" },
-  { subject: "Computer Science", title: "Computer Science XI", kind: "Online source", href: "https://fliphtml5.com/lgnrq/tsqa/Computer_Science_XI/" },
-  { subject: "Nepali", title: "Class 11 Nepali", kind: "Online source", href: "https://online.fliphtml5.com/gcbzg/hggo/#p=10" },
-  { subject: "Physics", title: "Physics table of contents", kind: "Publisher source", href: "https://buddhapublication.com/books/table_of_content/78959854.pdf" },
-  { subject: "Chemistry", title: "NCERT Chemistry Chapter 1", kind: "Official PDF", href: "https://ncert.nic.in/textbook/pdf/kech101.pdf" },
+  { subject: "Computer Science", title: "Computer Science XI", kind: "Included PDF", href: "/study_materials/Computer_Science_Class_XI_Chapters_1-11.pdf" },
+  { subject: "Nepali", title: "Class 11 Nepali", kind: "Included PDF", href: "/study_materials/neb-class-11-compulsory-nepali-book.pdf" },
+  { subject: "Physics", title: "Class 11 Physics", kind: "Included PDF", href: "/study_materials/phycics.pdf" },
+  { subject: "Chemistry", title: "Class 11 Chemistry", kind: "Included PDF", href: "/study_materials/chemistry.pdf" },
+  { subject: "English", title: "Class 11 English", kind: "Included PDF", href: "/study_materials/neb-grade-11-compulsory-english-book.pdf" },
+  { subject: "Social Studies", title: "Class 11 Social Studies", kind: "Included PDF", href: "/study_materials/social_grade_11.pdf" },
   { subject: "Law", title: "Law XII reference", kind: "Online source", href: "https://www.scribd.com/document/544136733/Law-xii" },
-  { subject: "Social Studies", title: "Samajik / Social Studies", kind: "Online source", href: "https://online.anyflip.com/qfwek/ceqm/mobile/index.html" },
   { subject: "Economics", title: "Economics", kind: "Online source", href: "https://online.anyflip.com/qfwek/dtwq/mobile/index.html" },
-  { subject: "Business Studies", title: "Business Studies 11 Nepali", kind: "Publisher source", href: "https://asmitapublication.com/product/277/business-studies-11-nepali/10-2" },
+  { subject: "Business Studies", title: "Business Studies 11 Nepali", kind: "Online source", href: "https://asmitapublication.com/product/277/business-studies-11-nepali/10-2" },
 ];
 
 function cleanText(value: string, fallback = "your lesson") {
@@ -439,7 +457,7 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }
           <div className="secondary-actions calm-hide">
             <button onClick={() => setView("planner")}><span>▦</span><b>Make a study plan</b></button>
             <button onClick={() => setView("communicate")}><span>◌</span><b>Help me ask a teacher</b></button>
-            <button onClick={() => setView("resources")}><span>▣</span><b>Open Grade 11 books</b></button>
+            <button onClick={() => setView("resources")}><span>▣</span><b>Open My Books</b></button>
           </div>
         </div>
 
@@ -477,6 +495,7 @@ function LessonResultCard({ result, action, onAction, onQuiz }: { result: Lesson
       {result.steps.length > 0 && <div className="step-list">{result.steps.map((s, i) => <div key={s}><b>STEP {i + 1}</b><p>{s}</p></div>)}</div>}
       <div className="result-outcome"><span>RESULT</span><p>{result.result}</p></div>
       <div className="analogy-box"><span>Think of it this way</span><p>{result.example}</p></div>
+      {(result.sourceNote || result.sources?.length) && <div className={`source-panel ${result.sourceMode === "GENERAL" ? "general" : "textbook"}`}><span>{result.sourceNote || "Source"}</span>{result.sources?.length ? <div className="source-list">{result.sources.map((source) => <div key={`${source.subject}-${source.pages}`}><b>{source.subject}</b><small>{source.title}</small><p>{source.pages}</p></div>)}</div> : <p>{result.sourceMode === "GENERAL" ? "This answer was not matched to a textbook page." : "Based on your textbook."}</p>}</div>}
       <div className="result-actions">
         {["Make simpler", "Explain normally", "Explain deeply", "Give example", "Use an analogy", "Show step-by-step"].map((a) => <button onClick={() => onAction(a)} key={a}>{a}</button>)}
         <button className="quiz-action" onClick={onQuiz}>Quiz me ⚡</button>
@@ -511,7 +530,7 @@ function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview }: { les
 function LearnPage({ lessonInput, setLessonInput, result, lessonAnalysis, loading, stage, runAction, showQuiz, setShowQuiz }: { lessonInput: string; setLessonInput: (v: string) => void; result: LessonResult | null; lessonAnalysis: LessonAnalysis | null; loading: boolean; stage: number; runAction: (a: string) => void; showQuiz: boolean; setShowQuiz: (v: boolean) => void }) {
   const [action, setAction] = useState("Simplify");
   const run = (a = action) => { setAction(a); runAction(a); setShowQuiz(false); };
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Adapt my lesson</h2><p>Paste anything you&apos;re learning. Adapt will keep the meaning accurate and change how it is explained.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Adaptation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Adapt for me</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard lessonInput={lessonInput} lessonResult={result} lessonAnalysis={lessonAnalysis} onReview={() => { setShowQuiz(false); run("Explain deeply"); }} />}</div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Adapt my lesson</h2><p>Paste a question, paragraph, or topic. Adapt first checks your books, then gives a clear explanation that matches your learning style.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Adaptation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Adapt for me</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard lessonInput={lessonInput} lessonResult={result} lessonAnalysis={lessonAnalysis} onReview={() => { setShowQuiz(false); run("Explain deeply"); }} />}</div>;
 }
 
 function AssignmentsPage({ calm }: { calm: boolean }) {
@@ -627,11 +646,137 @@ function ProgressPage() {
 }
 
 function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string) => void; setView: (v: View) => void }) {
+  const [books, setBooks] = useState<BookLibraryItem[]>(
+    grade11Materials.map((material) => ({
+      id: material.subject,
+      subject: material.subject,
+      title: material.title,
+      status: material.kind === "Included PDF" ? "Indexed" : "Not Indexed",
+      fileUrl: material.kind === "Included PDF" ? material.href : null,
+      sourceUrl: material.kind === "Included PDF" ? material.href : material.href,
+      canOpen: true,
+      canReplace: true,
+      canRemove: material.kind === "Included PDF",
+    })),
+  );
+  const [message, setMessage] = useState("Upload a PDF to index a subject, or open a source to start reading.");
+  const [busySubject, setBusySubject] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/books")
+      .then((response) => response.json())
+      .then((data: { books?: BookLibraryItem[] }) => {
+        if (cancelled || !data.books) return;
+        const bySubject = new Map(data.books.map((book) => [book.subject.toLowerCase(), book]));
+        setBooks((current) => current.map((book) => bySubject.get(book.subject.toLowerCase()) || book));
+      })
+      .catch(() => {
+        if (!cancelled) setMessage("The book list is ready, but the local index endpoint could not be reached.");
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   function handleMaterial(subject: string, title: string) {
-    setLessonInput(`Grade 11 ${subject}: ${title}. Paste a topic, paragraph, or homework question from this book and AdaptEd will explain it for a Grade 11 student.`);
+    setLessonInput(`Use the ${subject} textbook (${title}) as the reference. Paste a topic, paragraph, or homework question from this book and AdaptEd will answer from the book first.`);
     setView("learn");
   }
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> GRADE 11 LIBRARY</span><h2>Books connected to AdaptEd.</h2><p>Open a source, choose a subject, then paste a small topic or paragraph into AdaptEd for explanation, quiz, or homework help.</p></section><section className="resource-grid">{grade11Materials.map((material) => <article className="resource-card" key={`${material.subject}-${material.href}`}><div><span>{material.kind}</span><h3>{material.subject}</h3><p>{material.title}</p></div><div className="resource-actions"><a className="button" href={material.href} target="_blank" rel="noreferrer">Open source</a><button className="button primary" onClick={() => handleMaterial(material.subject, material.title)}>Use in AdaptEd</button></div></article>)}</section><div className="safety-card"><b>Source-safe study flow</b><p>AdaptEd uses these as Grade 11 references. Students should paste a small section, topic, or question instead of copying whole books into AI.</p></div></div>;
+
+  async function refreshBooks() {
+    const response = await fetch("/api/books");
+    if (!response.ok) throw new Error("Unable to refresh books");
+    const data = await response.json() as { books?: BookLibraryItem[] };
+    if (data.books) {
+      setBooks((current) => {
+        const bySubject = new Map(data.books!.map((book) => [book.subject.toLowerCase(), book]));
+        return current.map((book) => bySubject.get(book.subject.toLowerCase()) || book);
+      });
+    }
+  }
+
+  async function uploadBook(book: BookLibraryItem, file?: File) {
+    if (!file) return;
+    setBusySubject(book.subject);
+    setMessage(`Indexing ${book.subject}...`);
+    try {
+      const formData = new FormData();
+      formData.append("subject", book.subject);
+      formData.append("title", book.title);
+      formData.append("file", file);
+      const response = await fetch("/api/books", { method: "POST", body: formData });
+      if (!response.ok) throw new Error("Upload failed");
+      await refreshBooks();
+      setMessage(`${book.subject} is now indexed and ready for textbook-backed answers.`);
+    } catch {
+      setMessage(`Could not index ${book.subject} yet. Try a clearer PDF or upload it again.`);
+    } finally {
+      setBusySubject(null);
+    }
+  }
+
+  async function removeBook(book: BookLibraryItem) {
+    setBusySubject(book.subject);
+    setMessage(`Removing ${book.subject} from local books...`);
+    try {
+      const response = await fetch(`/api/books?subject=${encodeURIComponent(book.subject)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Remove failed");
+      await refreshBooks();
+      setMessage(`${book.subject} was removed from the local textbook index.`);
+    } catch {
+      setMessage(`Could not remove ${book.subject} right now.`);
+    } finally {
+      setBusySubject(null);
+    }
+  }
+
+  return (
+    <div className="page-content work-page">
+      <section className="page-intro">
+        <span className="eyebrow"><i /> MY BOOKS</span>
+        <h2>Textbooks connected to AdaptEd.</h2>
+        <p>Upload a PDF to index it, open a source, or jump straight into a textbook-backed explanation.</p>
+      </section>
+
+      <section className="safety-card books-safety">
+        <b>Book-first answering</b>
+        <p>AdaptEd searches your textbook first. If a page match is found, the answer will say which book and pages were used. If not, it will clearly label the answer as general AI help.</p>
+      </section>
+
+      <section className="resource-grid">
+        {books.map((book) => {
+          const openHref = book.fileUrl || book.sourceUrl;
+          return (
+            <article className="resource-card" key={book.id}>
+              <div>
+                <span>{book.status}</span>
+                <h3>{book.subject}</h3>
+                <p>{book.title}</p>
+              </div>
+              <div className="resource-actions">
+                {book.canOpen && openHref ? <a className="button" href={openHref} target="_blank" rel="noreferrer">Open Book</a> : <button className="button" disabled>Not indexed</button>}
+                <button className="button primary" onClick={() => handleMaterial(book.subject, book.title)}>Use in AdaptEd</button>
+                <label className={`button book-upload ${busySubject === book.subject ? "disabled" : ""}`}>
+                  {busySubject === book.subject ? "Working…" : book.status === "Indexed" ? "Replace PDF" : "Add PDF"}
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(e) => uploadBook(book, e.target.files?.[0])}
+                    disabled={busySubject === book.subject}
+                  />
+                </label>
+                {book.canRemove && <button className="button" onClick={() => removeBook(book)} disabled={busySubject === book.subject}>Remove Book</button>}
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <div className="safety-card">
+        <b>{message}</b>
+        <p>Students can open books, upload PDFs, or paste a question from the book into AdaptEd. The app will try textbook pages first before falling back to general AI help.</p>
+      </div>
+    </div>
+  );
 }
 
 function PreferencesPage({ preferences, setPreferences }: { preferences: Preferences; setPreferences: (p: Preferences) => void }) {

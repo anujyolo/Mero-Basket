@@ -445,6 +445,19 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .resource-card p { margin: 0; color: var(--muted); font-size: 13px; }
 .resource-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .resource-actions a { text-decoration: none; }
+.book-upload { position: relative; overflow: hidden; }
+.book-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.book-upload.disabled { opacity: .65; cursor: wait; }
+.books-safety { margin-top: 18px; }
+.source-panel { padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface-2); display: grid; gap: 10px; }
+.source-panel span { width: max-content; padding: 5px 9px; border-radius: 999px; background: var(--surface); color: var(--accent-dark); font-size: 10px; font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
+.source-panel.general { border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); }
+.source-panel.textbook { border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
+.source-list { display: grid; gap: 8px; }
+.source-list div { padding: 10px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.source-list b { display: block; font-size: 12px; }
+.source-list small { display: block; color: var(--muted); }
+.source-list p { margin: 5px 0 0; color: var(--subtle); font-size: 11px; }
 
 /* Calm mode */
 .app-shell.calm { --radius: 26px; }
