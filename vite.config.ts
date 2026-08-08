@@ -50,9 +50,14 @@ export default defineConfig(async () => {
         canvas: resolve(process.cwd(), "canvas-stub.ts"),
       },
     },
-    server: isCodexSeatbeltSandbox
-      ? { watch: { useFsEvents: false, usePolling: true } }
-      : undefined,
+    // host: true binds 0.0.0.0 so phones and teammates on the same Wi-Fi can open
+    // the app at http://<your-lan-ip>:3002. Without it Vite listens on localhost
+    // only and every other device gets ERR_CONNECTION_REFUSED.
+    server: {
+      host: true,
+      port: 3002,
+      ...(isCodexSeatbeltSandbox ? { watch: { useFsEvents: false, usePolling: true } } : {}),
+    },
     plugins: [
       vinext(),
       sites(),
