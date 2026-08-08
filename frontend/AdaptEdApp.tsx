@@ -151,6 +151,88 @@ function initialsFor(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "A";
 }
 
+// Quiz XP drives the student rank shown on the profile and progress pages.
+// 20 XP per correct answer, plus a 30 XP bonus for a perfect run.
+const XP_PER_CORRECT = 20;
+const RANK_TIERS = [
+  { name: "Beginner", min: 0, icon: "🌱" },
+  { name: "Learner", min: 150, icon: "📗" },
+  { name: "Explorer", min: 400, icon: "🧭" },
+  { name: "Achiever", min: 800, icon: "⭐" },
+  { name: "Scholar", min: 1400, icon: "🎓" },
+  { name: "Master", min: 2200, icon: "🏆" },
+];
+
+function xpForAttempt(attempt: QuizAttempt) {
+  return attempt.score * XP_PER_CORRECT + (attempt.total > 0 && attempt.score === attempt.total ? 30 : 0);
+}
+
+function totalXp(attempts: QuizAttempt[]) {
+  return attempts.reduce((sum, attempt) => sum + xpForAttempt(attempt), 0);
+}
+
+function rankForXp(xp: number) {
+  const index = RANK_TIERS.reduce((best, tier, i) => (xp >= tier.min ? i : best), 0);
+  const tier = RANK_TIERS[index];
+  const next = RANK_TIERS[index + 1] || null;
+  const span = next ? next.min - tier.min : 1;
+  return {
+    ...tier,
+    level: index + 1,
+    next,
+    toNext: next ? next.min - xp : 0,
+    percent: next ? Math.min(100, Math.round(((xp - tier.min) / span) * 100)) : 100,
+  };
+}
+
+// XP earned per day for the last `days` days, oldest first.
+function dailyXp(attempts: QuizAttempt[], days: number) {
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (days - 1 - index));
+    const key = date.toISOString().slice(0, 10);
+    const xp = attempts
+      .filter((attempt) => String(attempt.date).slice(0, 10) === key)
+      .reduce((sum, attempt) => sum + xpForAttempt(attempt), 0);
+    return { key, xp, label: ["S", "M", "T", "W", "T", "F", "S"][date.getDay()] };
+  });
+}
+
+const focusMotivations = [
+  "That is one full block of focus done. Your brain just got stronger.",
+  "You showed up and finished. That is the hard part.",
+  "Small sessions stack up. This one counted.",
+  "Well done. Rest now so the next session is just as good.",
+  "Focus is a skill and you just practised it.",
+  "Progress, not perfection. You moved forward today.",
+];
+
+// Short two-tone chime built with WebAudio so no audio file has to ship.
+function playFocusChime() {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtor) return;
+    const ctx = new AudioCtor();
+    [880, 1318.5].forEach((frequency, index) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = frequency;
+      const start = ctx.currentTime + index * 0.18;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.25, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.55);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.6);
+    });
+    window.setTimeout(() => ctx.close().catch(() => {}), 1400);
+  } catch {
+    /* audio is a nicety; never let it break the timer */
+  }
+}
+
 // Supabase auth errors are terse and technical. Rewrite the ones students actually hit.
 function friendlyAuthError(message: string) {
   const text = message.toLowerCase();
@@ -813,21 +895,32 @@ function Login({ onLogin, onBack, initialError }: { onLogin: (account: StudentAc
             onLogin(accountFromSupabaseUser(signUpData.session.user, cleanEmail));
             return;
           }
-          setPendingAccount(account);
+          // Supabase's built-in mailer only delivers to project team members and allows
+          // ~2 messages an hour, so the confirmation mail often never arrives. Save a
+          // device-local account too, so the student is never locked out waiting for it.
+          saveAccount({ ...account, password: cleanPassword });
+          setPendingAccount({ ...account, password: cleanPassword });
           setVerificationReason("signup");
           setMode("verify");
-          setSupabaseNotice(`Confirmation link sent to ${cleanEmail}. Open it in this browser, then press continue.`);
+          setSupabaseNotice(`Account created for ${cleanEmail}. If the confirmation email does not arrive, use “Continue without email” below.`);
           return;
         }
         // Password sign-in is the whole login. The previous build signed the student back out
         // and mailed a second magic link, which destroyed the session it had just created.
         const { data: signInData, error: passwordError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword });
         if (passwordError) {
+          // Fall back to the device-local account so an undelivered confirmation
+          // email cannot lock a student out of their own workspace.
+          const localMatch = stored[cleanEmail];
+          if (localMatch && localMatch.password === cleanPassword) {
+            onLogin(localMatch);
+            return;
+          }
           if (/email not confirmed/i.test(passwordError.message)) {
-            setPendingAccount(account);
+            setPendingAccount({ ...account, password: cleanPassword });
             setVerificationReason("signup");
             setMode("verify");
-            setSupabaseNotice(`${cleanEmail} is not confirmed yet. Open the link in your inbox, then press continue.`);
+            setSupabaseNotice(`${cleanEmail} is not confirmed yet. Open the link in your inbox, or use “Continue without email” below.`);
             return;
           }
           setError(friendlyAuthError(passwordError.message));
@@ -882,6 +975,11 @@ function Login({ onLogin, onBack, initialError }: { onLogin: (account: StudentAc
                   <p>{isSupabaseConfigured ? supabaseNotice || "Open the confirmation link in your inbox, then press continue below." : "In production this link is sent to Gmail. This local demo shows the link because no email provider is connected."}</p>
                   {!isSupabaseConfigured && <button className="button primary" type="button" onClick={() => setTypedCode(verificationCode)}>Open verification link</button>}
                   {isSupabaseConfigured && <button className="button" type="button" disabled={busy} onClick={resendConfirmation}>Resend confirmation email</button>}
+                  {isSupabaseConfigured && <button className="button primary" type="button" onClick={() => {
+                    const fallback = pendingAccount || { name: name.trim() || displayNameFromEmail(email), email: email.trim().toLowerCase(), password: password.trim(), createdAt: new Date().toISOString() };
+                    saveAccount(fallback);
+                    onLogin(fallback);
+                  }}>Continue without email →</button>}
                 </div>
                 {!isSupabaseConfigured && <label>Verification token<input value={typedCode} onChange={(e) => setTypedCode(e.target.value.toUpperCase())} placeholder="Click the email link or paste token" /></label>}
               </>
@@ -1193,11 +1291,15 @@ function FlashcardsPage({ lessonInput, lessonResult }: { lessonInput: string; le
 
 function FocusPage({ lessonInput, lessonResult, focusState, setFocusState, onSessionComplete }: { lessonInput: string; lessonResult: LessonResult | null; focusState: FocusState; setFocusState: (value: FocusState | ((current: FocusState) => FocusState)) => void; onSessionComplete: (session: StudySession) => void }) {
   const topic = getLessonTopic(lessonInput, lessonResult);
+  const [motivation, setMotivation] = useState("");
   useEffect(() => {
     if (!focusState.running || focusState.seconds <= 0) return;
     const timer = window.setInterval(() => {
       setFocusState((current) => {
         if (!current.running || current.seconds <= 1) {
+          // Chime and a line of encouragement the moment the timer lands on zero.
+          playFocusChime();
+          setMotivation(focusMotivations[Math.floor(Math.random() * focusMotivations.length)]);
           if (current.mode === "focus") {
             const endedAt = new Date();
             const durationSeconds = current.duration * 60;
@@ -1222,7 +1324,7 @@ function FocusPage({ lessonInput, lessonResult, focusState, setFocusState, onSes
   const display = `${String(Math.floor(focusState.seconds / 60)).padStart(2, "0")}:${String(focusState.seconds % 60).padStart(2, "0")}`;
   const label = focusState.mode === "break" ? "BREAK" : "CURRENT TASK";
   const title = focusState.mode === "break" ? "Take a break" : `Learn ${topic}`;
-  return <div className="page-content focus-page"><span className="eyebrow"><i /> FOCUS MODE</span><section className="focus-card"><span>{label}</span><h2>{title}</h2><div className="timer-ring" style={{ "--progress": `${(focusState.seconds / (focusState.duration * 60 || 1)) * 360}deg` } as React.CSSProperties}><div><strong>{display}</strong><small>{focusState.running ? "You are doing well" : focusState.seconds === 0 ? "Session complete" : "Ready when you are"}</small></div></div><div className="duration-row">{[10, 15, 20, 25].map((n) => <button className={focusState.mode === "focus" && focusState.duration === n ? "active" : ""} onClick={() => select(n)} key={n}>{n} min</button>)}</div><div className="focus-actions"><button className="button" onClick={() => setFocusState((current) => current.mode === "break" ? { ...current, running: false, seconds: current.duration * 60 } : { ...current, running: false, seconds: current.duration * 60, savedFocusDuration: undefined, savedFocusSeconds: undefined })}>Reset</button><button className="button primary large" onClick={() => setFocusState((current) => ({ ...current, running: !current.running }))}>{focusState.running ? "Pause" : focusState.seconds === 0 ? "Start again" : focusState.mode === "break" ? "Resume break" : "Start focus"}</button><button className="button" onClick={() => setFocusState((current) => current.mode === "break" ? { mode: "focus", duration: current.savedFocusDuration || 15, seconds: current.savedFocusSeconds || (current.savedFocusDuration || 15) * 60, running: false } : { mode: "break", duration: 5, seconds: 5 * 60, running: false, savedFocusDuration: current.duration, savedFocusSeconds: current.seconds })}>{focusState.mode === "break" ? "Resume focus" : "Take break"}</button></div>{focusState.seconds === 0 && <p className="gentle-message">Nice work. Would you like to continue or take a break?</p>}</section></div>;
+  return <div className="page-content focus-page"><span className="eyebrow"><i /> FOCUS MODE</span><section className="focus-card"><span>{label}</span><h2>{title}</h2><div className="timer-ring" style={{ "--progress": `${(focusState.seconds / (focusState.duration * 60 || 1)) * 360}deg` } as React.CSSProperties}><div><strong>{display}</strong><small>{focusState.running ? "You are doing well" : focusState.seconds === 0 ? "Session complete" : "Ready when you are"}</small></div></div><div className="duration-row">{[10, 15, 20, 25].map((n) => <button className={focusState.mode === "focus" && focusState.duration === n ? "active" : ""} onClick={() => select(n)} key={n}>{n} min</button>)}</div><div className="focus-actions"><button className="button" onClick={() => setFocusState((current) => current.mode === "break" ? { ...current, running: false, seconds: current.duration * 60 } : { ...current, running: false, seconds: current.duration * 60, savedFocusDuration: undefined, savedFocusSeconds: undefined })}>Reset</button><button className="button primary large" onClick={() => setFocusState((current) => ({ ...current, running: !current.running }))}>{focusState.running ? "Pause" : focusState.seconds === 0 ? "Start again" : focusState.mode === "break" ? "Resume break" : "Start focus"}</button><button className="button" onClick={() => setFocusState((current) => current.mode === "break" ? { mode: "focus", duration: current.savedFocusDuration || 15, seconds: current.savedFocusSeconds || (current.savedFocusDuration || 15) * 60, running: false } : { mode: "break", duration: 5, seconds: 5 * 60, running: false, savedFocusDuration: current.duration, savedFocusSeconds: current.seconds })}>{focusState.mode === "break" ? "Resume focus" : "Take break"}</button></div>{focusState.seconds === 0 && <p className="gentle-message">🔔 {motivation || "Nice work. Would you like to continue or take a break?"}</p>}</section></div>;
 }
 
 function RoutinePage() {
@@ -1376,7 +1478,14 @@ function formatDuration(seconds: number) {
   return hours ? `${hours}h ${rest}m` : `${rest}m`;
 }
 
-function ProgressPage({ sessions }: { sessions: StudySession[] }) {
+function ProgressPage({ sessions, quizAttempts }: { sessions: StudySession[]; quizAttempts: QuizAttempt[] }) {
+  const xp = totalXp(quizAttempts);
+  const rank = rankForXp(xp);
+  const xpDays = dailyXp(quizAttempts, 7);
+  const maxXpBar = Math.max(1, ...xpDays.map((day) => day.xp));
+  const todayXp = xpDays[xpDays.length - 1]?.xp || 0;
+  const yesterdayXp = xpDays[xpDays.length - 2]?.xp || 0;
+  const growth = todayXp - yesterdayXp;
   const today = new Date().toISOString().slice(0, 10);
   const todaySessions = sessions.filter((session) => session.date === today);
   const totalSeconds = sessions.reduce((sum, session) => sum + session.durationSeconds, 0);
@@ -1389,7 +1498,14 @@ function ProgressPage({ sessions }: { sessions: StudySession[] }) {
     return sessions.filter((session) => session.date === key).reduce((sum, session) => sum + Math.round(session.durationSeconds / 60), 0);
   });
   const maxBar = Math.max(1, ...weekBars);
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> REAL STUDY TRACKING</span><h2>Track Anuj&apos;s real focus time.</h2><p>These numbers come from completed Focus sessions on this browser. No fake demo progress is shown.</p></section><section className="stats-grid"><StatCard label="Topics studied" value={String(topics.length)} note="From focus sessions" icon="▤" /><StatCard label="Study time" value={formatDuration(totalSeconds)} note={`Today: ${formatDuration(todaySeconds)}`} icon="◷" /><StatCard label="Sessions completed" value={String(sessions.length)} note="Completed timers" icon="⚡" /><StatCard label="Today" value={formatDuration(todaySeconds)} note="Tracked today" icon="✓" /></section><section className="progress-layout"><article className="topic-progress"><div className="card-title"><div><span className="eyebrow"><i /> STUDY HISTORY</span><h2>Recent tracked sessions</h2></div></div>{sessions.length ? sessions.slice(0, 8).map((session) => <div key={session.id}><span><b>{session.subject}</b><small>{session.topic} · {session.date}</small></span><strong>{formatDuration(session.durationSeconds)}</strong><i><em style={{ width: `${Math.min(100, Math.max(8, Math.round(session.durationSeconds / 60)))}%` }} /></i></div>) : <div><span><b>No real study time tracked yet</b><small>Complete a Focus session to add history.</small></span><strong>0m</strong><i><em style={{ width: "0%" }} /></i></div>}</article><article className="week-card"><span>LAST 7 DAYS</span><h3>{formatDuration(weekBars.reduce((sum, minutes) => sum + minutes * 60, 0))}</h3><div className="bars">{weekBars.map((minutes, i) => <i style={{ height: `${Math.max(6, (minutes / maxBar) * 100)}%` }} key={`${minutes}-${i}`} title={`${minutes} minutes`}><small>{["S", "M", "T", "W", "T", "F", "S"][i]}</small></i>)}</div><p>{sessions.length ? "Tap/hover bars to see minutes for each day." : "Start and finish a Focus timer to begin tracking."}</p></article></section></div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> REAL STUDY TRACKING</span><h2>Track Anuj&apos;s real focus time.</h2><p>These numbers come from completed Focus sessions and quizzes on this browser. No fake demo progress is shown.</p></section>
+    <section className="rank-card">
+      <div className="rank-badge"><span>{rank.icon}</span><div><span className="eyebrow"><i /> STUDENT LEVEL {rank.level}</span><h2>{rank.name}</h2><p>{xp} XP earned from {quizAttempts.length} quiz{quizAttempts.length === 1 ? "" : "zes"}</p></div></div>
+      <div className="rank-track"><i><em style={{ width: `${rank.percent}%` }} /></i><small>{rank.next ? `${rank.toNext} XP to ${rank.next.name} ${rank.next.icon}` : "Top rank reached 🏆"}</small></div>
+      <div className="rank-growth"><b>{growth > 0 ? `▲ +${growth} XP` : growth < 0 ? `▼ ${growth} XP` : "No change"}</b><small>vs yesterday · {todayXp} XP today</small></div>
+    </section>
+    <section className="xp-week-card"><span className="eyebrow"><i /> DAILY GROWTH</span><h3>XP earned each day</h3><div className="bars">{xpDays.map((day, i) => <i style={{ height: `${Math.max(6, (day.xp / maxXpBar) * 100)}%` }} key={`${day.key}-${i}`} title={`${day.xp} XP on ${day.key}`}><small>{day.label}</small></i>)}</div><p>{quizAttempts.length ? "Each correct answer is 20 XP. A perfect quiz adds 30 bonus XP." : "Finish a quiz to start earning XP and climbing ranks."}</p></section>
+    <section className="stats-grid"><StatCard label="Total XP" value={String(xp)} note={`${rank.name} · level ${rank.level}`} icon="✦" /><StatCard label="Topics studied" value={String(topics.length)} note="From focus sessions" icon="▤" /><StatCard label="Study time" value={formatDuration(totalSeconds)} note={`Today: ${formatDuration(todaySeconds)}`} icon="◷" /><StatCard label="Sessions completed" value={String(sessions.length)} note="Completed timers" icon="⚡" /><StatCard label="Today" value={formatDuration(todaySeconds)} note="Tracked today" icon="✓" /></section><section className="progress-layout"><article className="topic-progress"><div className="card-title"><div><span className="eyebrow"><i /> STUDY HISTORY</span><h2>Recent tracked sessions</h2></div></div>{sessions.length ? sessions.slice(0, 8).map((session) => <div key={session.id}><span><b>{session.subject}</b><small>{session.topic} · {session.date}</small></span><strong>{formatDuration(session.durationSeconds)}</strong><i><em style={{ width: `${Math.min(100, Math.max(8, Math.round(session.durationSeconds / 60)))}%` }} /></i></div>) : <div><span><b>No real study time tracked yet</b><small>Complete a Focus session to add history.</small></span><strong>0m</strong><i><em style={{ width: "0%" }} /></i></div>}</article><article className="week-card"><span>LAST 7 DAYS</span><h3>{formatDuration(weekBars.reduce((sum, minutes) => sum + minutes * 60, 0))}</h3><div className="bars">{weekBars.map((minutes, i) => <i style={{ height: `${Math.max(6, (minutes / maxBar) * 100)}%` }} key={`${minutes}-${i}`} title={`${minutes} minutes`}><small>{["S", "M", "T", "W", "T", "F", "S"][i]}</small></i>)}</div><p>{sessions.length ? "Tap/hover bars to see minutes for each day." : "Start and finish a Focus timer to begin tracking."}</p></article></section></div>;
 }
 
 function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string) => void; setView: (v: View) => void }) {
@@ -1560,6 +1676,7 @@ function ProfilePage({ currentUser, preferences, quizAttempts, studySessions, se
       </section>
 
       <section className="stats-grid">
+        <StatCard label="Student level" value={`${rankForXp(totalXp(quizAttempts)).icon} ${rankForXp(totalXp(quizAttempts)).name}`} note={`${totalXp(quizAttempts)} XP total`} icon="✦" />
         <StatCard label="Quizzes done" value={String(quizAttempts.length)} note={`${averageScore}% average`} icon="⚡" />
         <StatCard label="Study time" value={formatDuration(totalStudySeconds)} note="From Focus sessions" icon="◷" />
         <StatCard label="Preferred session" value={`${preferences.session}m`} note={preferences.interface} icon="◎" />
@@ -1738,7 +1855,7 @@ export default function Home() {
         {view === "routine" && <RoutinePage />}
         {view === "communicate" && <CommunicatePage />}
         {view === "studyroom" && <StudyTogetherPage currentUser={currentUser} setView={setView} setLessonInput={setLessonInput} />}
-        {view === "progress" && <ProgressPage sessions={studySessions} />}
+        {view === "progress" && <ProgressPage sessions={studySessions} quizAttempts={quizAttempts} />}
         {view === "resources" && <ResourcesPage setLessonInput={setLessonInput} setView={setView} />}
         {view === "preferences" && <PreferencesPage preferences={preferences} setPreferences={setPreferences} />}
         {view === "profile" && <ProfilePage currentUser={currentUser} preferences={preferences} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} openHistory={() => setHistoryOpen(true)} />}
