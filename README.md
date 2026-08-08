@@ -19,6 +19,21 @@ The current build uses a clearly labeled local Demo AI fallback so the full judg
 
 To activate live AI, copy `.env.example` to `.env.local`, add a valid `OPENAI_API_KEY`, and restart the local server. The key is used only by the server-side `/api/adapt` route and is never sent to the browser. `OPENAI_MODEL` defaults to `gpt-5.6`.
 
+## Supabase setup
+
+Padhai Yatra can use Supabase Auth for real email verification links and Supabase tables for study rooms.
+
+1. Create a Supabase project.
+2. In Supabase, open Project Settings → API and copy:
+   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
+   - Publishable key → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+3. Put those values in `.env.local`.
+4. In Supabase SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql).
+5. In Authentication → URL Configuration, add your local URL while testing:
+   - `http://localhost:3002`
+
+If Supabase keys are missing, the app falls back to local demo login so the hackathon demo still works.
+
 ## Run locally
 
 ```bash

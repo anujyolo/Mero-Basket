@@ -5,6 +5,7 @@
 // Main frontend application: screens, interactions, and accessibility behavior.
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
 type View =
   | "dashboard"
@@ -652,6 +653,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
   const [typedCode, setTypedCode] = useState("");
   const [pendingAccount, setPendingAccount] = useState<StudentAccount | null>(null);
   const [verificationReason, setVerificationReason] = useState<"signup" | "login">("signup");
+  const [supabaseNotice, setSupabaseNotice] = useState("");
   const [error, setError] = useState("");
   const accounts = () => readStoredJson<Record<string, StudentAccount>>(USER_ACCOUNTS_KEY, {
     "demo@student.com": { name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() },
@@ -669,9 +671,13 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
     setMode("verify");
     setError("");
   }
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     if (mode === "verify") {
+      if (isSupabaseConfigured) {
+        setError("Check your email inbox and click the Supabase verification link to continue.");
+        return;
+      }
       if (!pendingAccount) {
         setMode("signup");
         setError("Please create your account again.");
@@ -697,6 +703,52 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
       return;
     }
     const stored = accounts();
+    if (supabase && cleanEmail !== "demo@student.com") {
+      const account: StudentAccount = { name: name.trim() || displayNameFromEmail(cleanEmail), email: cleanEmail, password: "supabase-auth", createdAt: new Date().toISOString() };
+      setError("");
+      setSupabaseNotice("");
+      if (mode === "signup") {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: cleanPassword,
+          options: {
+            data: { name: account.name },
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (signUpError) {
+          setError(signUpError.message);
+          return;
+        }
+        setPendingAccount(account);
+        setVerificationReason("signup");
+        setMode("verify");
+        setSupabaseNotice(`Supabase sent a verification link to ${cleanEmail}. Click that email link to enter.`);
+        return;
+      }
+      const { error: passwordError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword });
+      if (passwordError) {
+        setError(passwordError.message);
+        return;
+      }
+      await supabase.auth.signOut();
+      const { error: linkError } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: window.location.origin,
+        },
+      });
+      if (linkError) {
+        setError(linkError.message);
+        return;
+      }
+      setPendingAccount(account);
+      setVerificationReason("login");
+      setMode("verify");
+      setSupabaseNotice(`Password matched. Supabase sent a login verification link to ${cleanEmail}.`);
+      return;
+    }
     if (mode === "signup") {
       const account: StudentAccount = { name: name.trim() || displayNameFromEmail(cleanEmail), email: cleanEmail, password: cleanPassword, createdAt: new Date().toISOString() };
       beginEmailLinkVerification(account, "signup");
@@ -726,7 +778,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
         </aside>
         <div className="login-card">
           <Logo />
-          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Check your email."}</h1><p>{mode === "login" ? "Private accounts need email-link verification after the password check." : mode === "signup" ? "Sign up first. You will verify your email before entering." : `A verification link is prepared for ${pendingAccount?.email || email}.`}</p></div>
+          <div className="login-heading"><span className="eyebrow"><i /> STUDENT PORTAL</span><h1>{mode === "login" ? "Welcome back." : mode === "signup" ? "Create account." : "Check your email."}</h1><p>{mode === "login" ? "Private accounts need email-link verification after the password check." : mode === "signup" ? "Sign up first. You will verify your email before entering." : isSupabaseConfigured ? `Click the Supabase email link sent to ${pendingAccount?.email || email}.` : `A verification link is prepared for ${pendingAccount?.email || email}.`}</p></div>
           {mode !== "verify" && <div className="auth-tabs" role="group" aria-label="Login mode">
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
             <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Create account</button>
@@ -735,12 +787,12 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
             {mode === "verify" ? (
               <>
                 <div className="verification-card">
-                  <span>Email verification link</span>
-                  <strong>VERIFY-{verificationCode}</strong>
-                  <p>In production this link is sent to Gmail. This local demo shows the link because no email provider is connected.</p>
-                  <button className="button primary" type="button" onClick={() => setTypedCode(verificationCode)}>Open verification link</button>
+                  <span>{isSupabaseConfigured ? "Supabase email sent" : "Email verification link"}</span>
+                  {isSupabaseConfigured ? <strong>CHECK EMAIL</strong> : <strong>VERIFY-{verificationCode}</strong>}
+                  <p>{isSupabaseConfigured ? supabaseNotice || "Click the verification link in your inbox. Supabase will create the session after the link opens." : "In production this link is sent to Gmail. This local demo shows the link because no email provider is connected."}</p>
+                  {!isSupabaseConfigured && <button className="button primary" type="button" onClick={() => setTypedCode(verificationCode)}>Open verification link</button>}
                 </div>
-                <label>Verification token<input value={typedCode} onChange={(e) => setTypedCode(e.target.value.toUpperCase())} placeholder="Click the email link or paste token" /></label>
+                {!isSupabaseConfigured && <label>Verification token<input value={typedCode} onChange={(e) => setTypedCode(e.target.value.toUpperCase())} placeholder="Click the email link or paste token" /></label>}
               </>
             ) : (
               <>
@@ -755,7 +807,7 @@ function Login({ onLogin, onBack }: { onLogin: (account: StudentAccount) => void
             <button className="button full" type="button" onClick={() => { setMode("login"); setEmail("demo@student.com"); setPassword("demo123"); setError(""); }}>Use demo account</button>
           </form>
           <div className="demo-credentials"><b>Demo login</b><span>demo@student.com</span><span>Password: demo123</span></div>
-          <p className="privacy-note">Demo accounts are remembered in this browser only. For real email OTP, connect a production auth provider later.</p>
+          <p className="privacy-note">{isSupabaseConfigured ? "Supabase Auth is connected for real email verification links." : "Supabase keys are missing, so local demo verification is active."}</p>
         </div>
       </section>
     </main>
@@ -1134,7 +1186,7 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
   const inviteLink = `https://github.com/anujyolo/Mero-Basket?room=${encodeURIComponent(roomCode)}&topic=${encodeURIComponent(topic || "study-room")}`;
   useEffect(() => { localStorage.setItem("padhai-yatra-study-friends-v1", JSON.stringify(friends)); }, [friends]);
   useEffect(() => { localStorage.setItem("padhai-yatra-study-messages-v1", JSON.stringify(messages)); }, [messages]);
-  const invite = () => {
+  const invite = async () => {
     const clean = friendEmail.trim().toLowerCase();
     if (!clean.includes("@")) {
       setInviteStatus("Enter a valid friend email first.");
@@ -1145,7 +1197,21 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
     window.location.href = `mailto:${clean}?subject=${subject}&body=${body}`;
     setFriends((current) => current.includes(clean) ? current : [clean, ...current].slice(0, 12));
     setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to ${roomMode.toLowerCase()} room "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
-    setInviteStatus(`Email draft opened for ${clean}. Press Send in your mail app.`);
+    if (supabase) {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (userId) {
+        const { data: room } = await supabase
+          .from("study_rooms")
+          .upsert({ owner_id: userId, room_code: roomCode, topic, mode: roomMode }, { onConflict: "room_code" })
+          .select("id")
+          .single();
+        if (room?.id) {
+          await supabase.from("study_invites").insert({ room_id: room.id, inviter_id: userId, invitee_email: clean });
+        }
+      }
+    }
+    setInviteStatus(`Email draft opened for ${clean}. Press Send in your mail app.${supabase ? " Invite also saved to Supabase." : ""}`);
     setFriendEmail("");
   };
   const send = () => {
@@ -1453,6 +1519,22 @@ export default function Home() {
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem("adapted-theme", theme); }, [theme]);
   useEffect(() => { localStorage.setItem("adapted-preferences", JSON.stringify(preferences)); }, [preferences]);
   useEffect(() => { fetch("/api/status").then((r) => r.json()).then((data: { mode?: string }) => setAiMode(data.mode === "LIVE_AI" ? "live" : "demo")).catch(() => setAiMode("demo")); }, []);
+  useEffect(() => {
+    if (!supabase) return;
+    const applySupabaseSession = (email?: string, name?: string, createdAt?: string) => {
+      if (!email) return;
+      login({ name: name || displayNameFromEmail(email), email, password: "supabase-auth", createdAt: createdAt || new Date().toISOString() });
+    };
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user;
+      applySupabaseSession(user?.email, typeof user?.user_metadata?.name === "string" ? user.user_metadata.name : undefined, user?.created_at);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user;
+      applySupabaseSession(user?.email, typeof user?.user_metadata?.name === "string" ? user.user_metadata.name : undefined, user?.created_at);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
   useEffect(() => {
     localStorage.setItem(ANALYSIS_CACHE_KEY, JSON.stringify(analysisCache));
   }, [analysisCache]);
