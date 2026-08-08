@@ -4,7 +4,7 @@
 
 // Main frontend application: screens, interactions, and accessibility behavior.
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
 type View =
@@ -1416,15 +1416,69 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
   const [inviteStatus, setInviteStatus] = useState("");
   const [friends, setFriends] = useState<string[]>(() => readStoredJson("padhai-yatra-study-friends-v1", []));
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<{ from: string; text: string; time: string }[]>(() => readStoredJson("padhai-yatra-study-messages-v1", [
-    { from: "Padhai Yatra", text: "Create a topic, invite friends, then start a group quiz together.", time: new Date().toISOString() },
+  const [messages, setMessages] = useState<{ id: string; from: string; text: string; time: string }[]>(() => readStoredJson("padhai-yatra-study-messages-v1", [
+    { id: "welcome", from: "Padhai Yatra", text: "Create a topic, invite friends, then start a group quiz together.", time: new Date().toISOString() },
   ]));
-  const roomCode = useMemo(() => `PY-${(topic || "ROOM").replace(/[^a-z0-9]/gi, "").slice(0, 4).toUpperCase() || "ROOM"}-${friends.length + 1}`, [friends.length, topic]);
+  const [participants, setParticipants] = useState<{ name: string; email: string }[]>([]);
+  const [roomLive, setRoomLive] = useState(false);
+  const channelRef = useRef<ReturnType<NonNullable<typeof supabase>["channel"]> | null>(null);
+  // The room code identifies the shared channel, so it must be identical for everyone
+  // in it. The old code folded in friends.length, which changed as people were added
+  // and silently put the host and the guest in two different rooms.
+  const roomCode = useMemo(() => {
+    if (joinedRoom?.room) return joinedRoom.room;
+    const slug = (topic || "ROOM").replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase() || "ROOM";
+    return `PY-${slug}`;
+  }, [joinedRoom, topic]);
   // Point at the running app, not the source repo — a friend opening this needs the room.
   const appOrigin = typeof window === "undefined" ? "http://localhost:3002" : window.location.origin;
   const inviteLink = `${appOrigin}/?room=${encodeURIComponent(roomCode)}&topic=${encodeURIComponent(topic || "study-room")}&mode=${encodeURIComponent(roomMode)}`;
   useEffect(() => { localStorage.setItem("padhai-yatra-study-friends-v1", JSON.stringify(friends)); }, [friends]);
   useEffect(() => { localStorage.setItem("padhai-yatra-study-messages-v1", JSON.stringify(messages)); }, [messages]);
+
+  // Live room over Supabase Realtime. Presence gives a real "who is here" list and
+  // broadcast shares chat, so both people see the same room. This uses only the
+  // publishable key — no server secret, no RLS, and no Supabase session required,
+  // which matters because accounts fall back to device-local when email is down.
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !roomCode) return;
+    const channel = client.channel(`study-room-${roomCode}`, {
+      config: { presence: { key: currentUser.email || currentUser.name } },
+    });
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState<{ name: string; email: string }>();
+        const people = Object.values(state)
+          .flat()
+          .map((entry) => ({ name: entry.name, email: entry.email }));
+        // De-duplicate: the same person in two tabs is still one participant.
+        const unique = new Map(people.map((person) => [person.email || person.name, person]));
+        setParticipants([...unique.values()]);
+      })
+      .on("broadcast", { event: "chat" }, ({ payload }) => {
+        const incoming = payload as { from: string; text: string; time: string; id: string };
+        setMessages((current) => current.some((m) => m.id === incoming.id)
+          ? current
+          : [incoming, ...current].slice(0, 40));
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          setRoomLive(true);
+          await channel.track({ name: currentUser.name, email: currentUser.email });
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setRoomLive(false);
+        }
+      });
+
+    channelRef.current = channel;
+    return () => {
+      channelRef.current = null;
+      setRoomLive(false);
+      client.removeChannel(channel);
+    };
+  }, [roomCode, currentUser.email, currentUser.name]);
   const invite = async () => {
     const clean = friendEmail.trim().toLowerCase();
     if (!clean.includes("@")) {
@@ -1432,7 +1486,7 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
       return;
     }
     setFriends((current) => current.includes(clean) ? current : [clean, ...current].slice(0, 12));
-    setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to ${roomMode.toLowerCase()} room "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
+    setMessages((current) => [{ id: `invite-${clean}-${new Date().toISOString()}`, from: currentUser.name, text: `Invited ${clean} to ${roomMode.toLowerCase()} room "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 40));
     setFriendEmail("");
 
     // The friend is in the room the moment they have the link, so put it on the
@@ -1478,14 +1532,28 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
   };
   const send = () => {
     if (!message.trim()) return;
-    setMessages((current) => [{ from: currentUser.name, text: message.trim(), time: new Date().toISOString() }, ...current].slice(0, 20));
+    const entry = {
+      id: `${currentUser.email || currentUser.name}-${new Date().toISOString()}-${message.trim().slice(0, 12)}`,
+      from: currentUser.name,
+      text: message.trim(),
+      time: new Date().toISOString(),
+    };
+    setMessages((current) => [entry, ...current].slice(0, 40));
     setMessage("");
+    // Push to everyone else in the room. Falls back to a local-only message if the
+    // channel is not connected, so chat still works offline.
+    channelRef.current?.send({ type: "broadcast", event: "chat", payload: entry });
   };
   const startQuiz = () => {
     setLessonInput(`${topic.trim() || "Grade 11 study topic"} group ${roomMode.toLowerCase()} quiz`);
     setView("quiz");
   };
-  const leaderboard = [currentUser.email, ...friends].slice(0, 5).map((player, index) => ({ player, score: Math.max(55, 96 - index * 9), status: index === 0 ? "Ready" : "Invited" }));
+  // People actually connected to the room right now, then anyone invited but not yet here.
+  const liveEmails = new Set(participants.map((person) => person.email));
+  const roster = [
+    ...participants.map((person) => ({ player: person.name || person.email, detail: person.email, status: "In room" })),
+    ...friends.filter((email) => !liveEmails.has(email)).map((email) => ({ player: email, detail: "", status: "Invited" })),
+  ].slice(0, 8);
   return (
     <div className="page-content work-page">
       <section className="page-intro">
@@ -1504,22 +1572,22 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
           <div className="room-actions"><button className="button primary large" onClick={startQuiz}>Start same quiz for everyone →</button><button className="button large" onClick={() => setView("focus")}>Start group focus</button></div>
         </article>
         <article className="study-room-card">
-          <span className="eyebrow"><i /> FRIENDS</span>
+          <span className="eyebrow"><i /> IN THIS ROOM {roomLive && <em className="live-dot" title="Live room connected" />}</span>
           <div className="friend-list">
-            {friends.length ? friends.map((friend) => <div key={friend}><span className="avatar">{friend[0]?.toUpperCase()}</span><b>{friend}</b><small>Invited</small></div>) : <p>No friends invited yet. Add an email to prepare the study group.</p>}
+            {roster.length ? roster.map((person) => <div key={`${person.player}-${person.status}`}><span className="avatar">{(person.player || "?")[0]?.toUpperCase()}</span><b>{person.player}</b><small>{person.status === "In room" ? "● In room now" : "Invited"}</small></div>) : <p>No one here yet. Invite a friend and they will appear the moment they open the link.</p>}
           </div>
         </article>
         <article className="study-room-card chat">
           <span className="eyebrow"><i /> GROUP CONVERSATION</span>
           <div className="inline-form"><input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write a study message..." /><button className="button primary" onClick={send}>Send</button></div>
           <div className="message-list">
-            {messages.map((item, index) => <div key={`${item.time}-${index}`}><b>{item.from}</b><p>{item.text}</p><small>{new Date(item.time).toLocaleTimeString()}</small></div>)}
+            {messages.map((item, index) => <div key={item.id || `${item.time}-${index}`}><b>{item.from}</b><p>{item.text}</p><small>{new Date(item.time).toLocaleTimeString()}</small></div>)}
           </div>
         </article>
         <article className="study-room-card">
           <span className="eyebrow"><i /> LIVE SCOREBOARD</span>
           <div className="leaderboard-list">
-            {leaderboard.map((row, index) => <div key={row.player}><b>#{index + 1}</b><span>{row.player}</span><strong>{row.score}%</strong><small>{row.status}</small></div>)}
+            {roster.map((row, index) => <div key={`${row.player}-score`}><b>#{index + 1}</b><span>{row.player}</span><strong>{row.status === "In room" ? "Ready" : "—"}</strong><small>{row.status}</small></div>)}
           </div>
         </article>
       </section>
