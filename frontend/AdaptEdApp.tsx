@@ -759,6 +759,7 @@ function LoadingPanel({ stage }: { stage: number }) {
 }
 
 function LessonResultCard({ result, action, onAction, onQuiz }: { result: LessonResult; action: string; onAction: (a: string) => void; onQuiz: () => void }) {
+  const videoSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${result.title} grade 11 explanation`)}`;
   return (
     <article className="result-card">
       <div className="result-head"><div><span className="eyebrow"><i /> ADAPTED · {action.toUpperCase()}</span><h2>{result.title}</h2></div><span className="preference-chip">Short + visual + example</span></div>
@@ -767,9 +768,11 @@ function LessonResultCard({ result, action, onAction, onQuiz }: { result: Lesson
       {result.steps.length > 0 && <div className="step-list">{result.steps.map((s, i) => <div key={s}><b>STEP {i + 1}</b><p>{s}</p></div>)}</div>}
       <div className="result-outcome"><span>RESULT</span><p>{result.result}</p></div>
       <div className="analogy-box"><span>Think of it this way</span><p>{result.example}</p></div>
+      <div className="video-box"><span>Video help</span><p>Find a YouTube explanation for <b>{result.title}</b>.</p><a className="button primary" href={videoSearchUrl} target="_blank" rel="noreferrer">Open related YouTube videos →</a></div>
       {(result.sourceNote || result.sources?.length) && <div className={`source-panel ${result.sourceMode === "GENERAL" ? "general" : "textbook"}`}><span>{result.sourceNote || "Source"}</span>{result.sources?.length ? <div className="source-list">{result.sources.map((source) => <div key={`${source.subject}-${source.pages}`}><b>{source.subject}</b><small>{source.title}</small><p>{source.pages}</p></div>)}</div> : <p>{result.sourceMode === "GENERAL" ? "This answer was not matched to a textbook page." : "Based on your textbook."}</p>}</div>}
       <div className="result-actions">
         {["Make simpler", "Explain normally", "Explain deeply", "Give example", "Use an analogy", "Show step-by-step"].map((a) => <button onClick={() => onAction(a)} key={a}>{a}</button>)}
+        <a className="button" href={videoSearchUrl} target="_blank" rel="noreferrer">Video ▶</a>
         <button className="quiz-action" onClick={onQuiz}>Quiz me ⚡</button>
       </div>
     </article>
