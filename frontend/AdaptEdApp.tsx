@@ -154,7 +154,7 @@ const demoLesson =
 
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "⌂" },
-  { id: "learn", label: "Adapt my lesson", icon: "✦" },
+  { id: "learn", label: "Explain my lesson", icon: "✦" },
   { id: "assignments", label: "Assignments", icon: "☑" },
   { id: "quiz", label: "Quick quiz", icon: "⚡" },
   { id: "planner", label: "Study plan", icon: "▦" },
@@ -504,9 +504,9 @@ function buildEmergencyAnalysis(lessonInput: string): LessonAnalysis {
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="logo" aria-label="AdaptEd AI home">
-      <span className="logo-mark">A</span>
-      {!compact && <span>AdaptEd <b>AI</b></span>}
+    <div className="logo" aria-label="Padhai Yatra home">
+      <img className="logo-image" src="/padhai-yatra-logo.png" alt="" />
+      {!compact && <span>Padhai <b>Yatra</b></span>}
     </div>
   );
 }
@@ -532,8 +532,8 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
       <section className="hero">
         <div className="hero-copy">
           <span className="eyebrow"><i /> Personalized learning, without the pressure</span>
-          <h1>One lesson.<br /><em>Different ways</em> to learn.</h1>
-          <p>An AI learning companion that adapts explanations, assignments and study plans to the way you learn best.</p>
+          <h1>Padhai Yatra.<br /><em>Learn anytime, anywhere.</em></h1>
+          <p>A Grade 11 learning companion that explains topics, builds quizzes, finds videos, and plans study time around the way you learn best.</p>
           <div className="hero-actions">
             <button className="button primary large" onClick={onStart}>Start learning <span>→</span></button>
             <button className="button large" onClick={onDemo}>Try Anuj&apos;s demo</button>
@@ -542,7 +542,12 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
             <span>✓ No medical labels</span><span>✓ Your preferences</span><span>✓ Calm by design</span>
           </div>
         </div>
-        <div className="adapt-visual" aria-label="Example of AdaptEd simplifying a lesson">
+        <div className="adapt-visual" aria-label="Example of Padhai Yatra simplifying a lesson">
+          <div className="brand-preview">
+            <img src="/padhai-yatra-logo.png" alt="Padhai Yatra logo" />
+            <b>Padhai Yatra</b>
+            <span>Learn Anytime, Anywhere</span>
+          </div>
           <div className="paper original-paper">
             <span className="paper-label">ORIGINAL LESSON</span>
             <p>Evaporation is the process by which molecules in a liquid state acquire sufficient kinetic energy to transition into the gaseous state.</p>
@@ -571,26 +576,26 @@ function Landing({ onStart, onDemo, theme, toggleTheme }: { onStart: () => void;
         <div>
           <span className="eyebrow"><i /> Built for real study days</span>
           <h2>One place for understanding, planning, and practicing.</h2>
-          <p>AdaptEd is more than a chatbot. Each tool uses the same learning preferences, so your study experience stays consistent.</p>
+          <p>Padhai Yatra is more than a chatbot. Each tool uses the same learning preferences, so your study experience stays consistent.</p>
         </div>
         <div className="tool-list">
-          {["Adapt complex lessons", "Break down assignments", "Generate quick quizzes", "Build focused study plans", "Create and review flashcards", "Communicate what you need"].map((x, i) => <div key={x}><span>{["✦", "☑", "⚡", "▦", "▤", "◌"][i]}</span>{x}<b>→</b></div>)}
+          {["Understand complex lessons", "Break down assignments", "Generate quick quizzes", "Build focused study plans", "Create and review flashcards", "Communicate what you need"].map((x, i) => <div key={x}><span>{["✦", "☑", "⚡", "▦", "▤", "◌"][i]}</span>{x}<b>→</b></div>)}
         </div>
       </section>
 
       <section className="section accessibility-section" id="accessibility">
         <div className="quote-mark">“</div>
-        <blockquote>Instead of forcing every student to adapt to the same lesson, AdaptEd AI adapts the lesson to the student.</blockquote>
+        <blockquote>Instead of forcing every student to adapt to the same lesson, Padhai Yatra adapts the lesson to the student.</blockquote>
         <p>Educational personalization for every learner—without diagnosis, assumptions, or judgment.</p>
       </section>
 
       <section className="final-cta">
         <Logo />
-        <h2>Learning that adapts to you.</h2>
+        <h2>Learn anytime, anywhere.</h2>
         <p>Start with Anuj&apos;s demo profile and personalize your first lesson in under a minute.</p>
         <button className="button primary large" onClick={onDemo}>Explore the demo <span>→</span></button>
       </section>
-      <footer><span>AdaptEd AI · Hackathon 2026</span><span>Educational support, not clinical assessment.</span></footer>
+      <footer><span>Padhai Yatra · Hackathon 2026</span><span>Educational support, not clinical assessment.</span></footer>
     </main>
   );
 }
@@ -629,7 +634,7 @@ function Header({ title, calm, setCalm, theme, toggleTheme, onMenu, aiMode, onPr
       <button className="icon-button mobile-menu" onClick={onMenu} aria-label="Open navigation">☰</button>
       <div><span className="breadcrumb">WORKSPACE /</span><h1>{title}</h1></div>
       <div className="header-actions">
-        <span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "checking" ? "Checking Adapt…" : aiMode === "live" ? "Adapt AI live" : "Adapt demo ready"}</span>
+        <span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "checking" ? "Checking Padhai Yatra…" : aiMode === "live" ? "Padhai Yatra AI live" : "Padhai Yatra demo ready"}</span>
         <label className="calm-toggle"><input type="checkbox" checked={calm} onChange={(e) => setCalm(e.target.checked)} /><span className="switch" /><b>Calm mode</b></label>
         <button className="icon-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>{theme === "light" ? "☾" : "☀"}</button>
         <button className="avatar profile-button" onClick={onProfile} aria-label="Open Anuj profile">A</button>
@@ -710,14 +715,14 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }
   ];
   return (
     <div className="page-content dashboard-page">
-      <section className="welcome-row simple-welcome"><div><p className="date-label">YOUR LEARNING SPACE</p><h2>Hi Anuj, what can we make easier? <span>👋</span></h2><p>Choose one thing. Adapt will guide you step by step.</p></div><button className="streak-pill" onClick={() => setView("progress")}><span>◇</span><div><b>5 day streak</b><small>See your progress →</small></div></button></section>
+      <section className="welcome-row simple-welcome"><div><p className="date-label">YOUR LEARNING SPACE</p><h2>Hi Anuj, what can we make easier? <span>👋</span></h2><p>Choose one thing. Padhai Yatra will guide you step by step.</p></div><button className="streak-pill" onClick={() => setView("progress")}><span>◇</span><div><b>5 day streak</b><small>See your progress →</small></div></button></section>
 
       <section className="start-guide calm-hide" aria-label="Three simple steps">
         <div><b>1</b><span><strong>Choose a goal</strong><small>Pick one card below</small></span></div>
         <i>→</i>
         <div><b>2</b><span><strong>Add your work</strong><small>Paste notes or a task</small></span></div>
         <i>→</i>
-        <div><b>3</b><span><strong>Learn your way</strong><small>Adapt follows your style</small></span></div>
+        <div><b>3</b><span><strong>Learn your way</strong><small>Padhai Yatra follows your style</small></span></div>
       </section>
 
       <section className="easy-dashboard">
@@ -745,9 +750,9 @@ function Dashboard({ setView, lessonInput, setLessonInput, adapt, lessonResult }
       </section>
 
       <section className="quick-paste calm-hide">
-        <div><span className="quick-icon">✦</span><div><b>Already know what you need?</b><small>Paste a topic or lesson here and Adapt will begin.</small></div></div>
+        <div><span className="quick-icon">✦</span><div><b>Already know what you need?</b><small>Paste a topic or lesson here and Padhai Yatra will begin.</small></div></div>
         <textarea value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a topic or lesson…" aria-label="Quick learning material" />
-        <button className="button primary" onClick={adapt}>Adapt it for me →</button>
+        <button className="button primary" onClick={adapt}>Explain it for me →</button>
       </section>
     </div>
   );
@@ -818,7 +823,7 @@ function QuizCard({ lessonInput, lessonResult, lessonAnalysis, onReview, onCompl
 function LearnPage({ lessonInput, setLessonInput, result, lessonAnalysis, loading, stage, runAction, showQuiz, setShowQuiz, onQuizComplete }: { lessonInput: string; setLessonInput: (v: string) => void; result: LessonResult | null; lessonAnalysis: LessonAnalysis | null; loading: boolean; stage: number; runAction: (a: string) => void; showQuiz: boolean; setShowQuiz: (v: boolean) => void; onQuizComplete: (attempt: QuizAttempt) => void }) {
   const [action, setAction] = useState("Simplify");
   const run = (a = action) => { setAction(a); runAction(a); setShowQuiz(false); };
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Adapt my lesson</h2><p>Paste a question, paragraph, or topic. Adapt first checks your books, then gives a clear explanation that matches your learning style.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Adaptation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Adapt for me</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard lessonInput={lessonInput} lessonResult={result} lessonAnalysis={lessonAnalysis} onReview={() => { setShowQuiz(false); run("Explain deeply"); }} onComplete={onQuizComplete} />}</div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> CORE LEARNING TOOL</span><h2>Explain my lesson</h2><p>Paste a question, paragraph, or topic. Padhai Yatra first checks your books, then gives a clear explanation that matches your learning style.</p></section><section className="composer-card"><label htmlFor="lesson-material">Your learning material</label><textarea id="lesson-material" value={lessonInput} onChange={(e) => setLessonInput(e.target.value)} placeholder="Paste a lesson, notes, textbook paragraph, or topic here…" /><div className="sample-row"><button onClick={() => setLessonInput(demoLesson)}>Use photosynthesis example</button><span>{lessonInput.length} characters</span></div><div className="action-tabs" role="group" aria-label="Explanation style">{["Simplify", "Explain differently", "Give example", "Show key points", "Break into steps"].map((a) => <button className={action === a ? "active" : ""} onClick={() => setAction(a)} key={a}>{a}</button>)}</div><button className="button primary large" disabled={!lessonInput.trim() || loading} onClick={() => run()}>Explain for me</button></section>{loading && <LoadingPanel stage={stage} />}{result && !loading && !showQuiz && <LessonResultCard result={result} action={action} onAction={run} onQuiz={() => setShowQuiz(true)} />}{showQuiz && <QuizCard lessonInput={lessonInput} lessonResult={result} lessonAnalysis={lessonAnalysis} onReview={() => { setShowQuiz(false); run("Explain deeply"); }} onComplete={onQuizComplete} />}</div>;
 }
 
 function AssignmentsPage({ calm }: { calm: boolean }) {
@@ -854,7 +859,7 @@ function AssignmentsPage({ calm }: { calm: boolean }) {
       setTasks((data.tasks || []).map((task) => ({ ...task, done: false })));
     } catch {
       setDetectedHomework(text || (photo ? "Homework photo attached" : ""));
-      setAnswer("Adapt could not read this assignment yet. Try typing the question or retaking a clearer photo.");
+      setAnswer("Padhai Yatra could not read this assignment yet. Try typing the question or retaking a clearer photo.");
       setTasks(initialTasks);
     } finally {
       setLoading(false);
@@ -884,7 +889,7 @@ function PlannerPage() {
   const slots = totalMinutes <= 180
     ? [["0-15 min", focusTopics[0], "Review foundations"], ["15-35 min", focusTopics[1] || focusTopics[0], "Practice examples"], ["35-40 min", "Short break", "Reset"], ["40-55 min", focusTopics[2] || focusTopics[0], "Solve questions"], ["55-60 min", "Mini quiz", "Check understanding"]]
     : [["Day 1", focusTopics[0], "Learn the basics"], ["Day 2", focusTopics[1] || focusTopics[0], "Practice core questions"], ["Middle", focusTopics[2] || focusTopics[0], "Fix weak areas"], ["Before exam", "Mock quiz", "Check speed and accuracy"], ["Final review", "Key points", "Revise lightly"]];
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> STUDY PLANNER</span><h2>Plan around the time you have.</h2><p>A focused plan with breaks, priorities, and a clear finish line.</p></section><section className="planner-grid"><form className="form-card" onSubmit={(e) => { e.preventDefault(); setDone([]); setReady(true); }}><label>What are you studying?<input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Maths, accounting, science..." /></label><label>How much time do you have?<div className="time-picker"><input type="number" min="1" value={timeAmount} onChange={(e) => setTimeAmount(Math.max(1, Number(e.target.value) || 1))} /><select value={timeUnit} onChange={(e) => setTimeUnit(e.target.value as "minutes" | "hours" | "days" | "weeks")}><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option><option value="weeks">weeks</option></select></div></label><label>When is your exam?<select value={exam} onChange={(e) => setExam(e.target.value)}><option>Tomorrow</option><option>This week</option><option>Next week</option><option>In a few weeks</option></select></label><label>Topics<textarea value={topics} onChange={(e) => setTopics(e.target.value)} placeholder="Algebra, fractions, word problems..." /></label><button className="button primary large" type="submit">Build my plan →</button></form><aside className="rescue-card"><span>SMART TIME PLAN</span><h3>{planLabel}</h3><p>Adapt will spread work based on whether you have minutes, hours, days, or weeks.</p>{focusTopics.slice(0, 3).map((topic, i) => <div key={`${topic}-${i}`}><b>{topic}</b><small>{i === 0 ? "Focus first" : i === 1 ? "Practice next" : "Quick refresh"}</small></div>)}</aside></section>{ready && <section className="generated-plan"><div className="card-title"><div><span className="eyebrow"><i /> {planLabel.toUpperCase()} PLAN</span><h2>{planSubject} · {exam}</h2></div><span className="preference-chip">Based on your learning style</span></div>{slots.map((s, i) => <button type="button" className={done.includes(i) ? "done" : ""} onClick={() => setDone((d) => d.includes(i) ? d.filter((x) => x !== i) : [...d, i])} key={`${s[0]}-${s[1]}`}><span>{done.includes(i) ? "✓" : i + 1}</span><b>{s[0]}</b><div><strong>{s[1]}</strong><small>{s[2]}</small></div></button>)}</section>}</div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> STUDY PLANNER</span><h2>Plan around the time you have.</h2><p>A focused plan with breaks, priorities, and a clear finish line.</p></section><section className="planner-grid"><form className="form-card" onSubmit={(e) => { e.preventDefault(); setDone([]); setReady(true); }}><label>What are you studying?<input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Maths, accounting, science..." /></label><label>How much time do you have?<div className="time-picker"><input type="number" min="1" value={timeAmount} onChange={(e) => setTimeAmount(Math.max(1, Number(e.target.value) || 1))} /><select value={timeUnit} onChange={(e) => setTimeUnit(e.target.value as "minutes" | "hours" | "days" | "weeks")}><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option><option value="weeks">weeks</option></select></div></label><label>When is your exam?<select value={exam} onChange={(e) => setExam(e.target.value)}><option>Tomorrow</option><option>This week</option><option>Next week</option><option>In a few weeks</option></select></label><label>Topics<textarea value={topics} onChange={(e) => setTopics(e.target.value)} placeholder="Algebra, fractions, word problems..." /></label><button className="button primary large" type="submit">Build my plan →</button></form><aside className="rescue-card"><span>SMART TIME PLAN</span><h3>{planLabel}</h3><p>Padhai Yatra will spread work based on whether you have minutes, hours, days, or weeks.</p>{focusTopics.slice(0, 3).map((topic, i) => <div key={`${topic}-${i}`}><b>{topic}</b><small>{i === 0 ? "Focus first" : i === 1 ? "Practice next" : "Quick refresh"}</small></div>)}</aside></section>{ready && <section className="generated-plan"><div className="card-title"><div><span className="eyebrow"><i /> {planLabel.toUpperCase()} PLAN</span><h2>{planSubject} · {exam}</h2></div><span className="preference-chip">Based on your learning style</span></div>{slots.map((s, i) => <button type="button" className={done.includes(i) ? "done" : ""} onClick={() => setDone((d) => d.includes(i) ? d.filter((x) => x !== i) : [...d, i])} key={`${s[0]}-${s[1]}`}><span>{done.includes(i) ? "✓" : i + 1}</span><b>{s[0]}</b><div><strong>{s[1]}</strong><small>{s[2]}</small></div></button>)}</section>}</div>;
 }
 
 function FlashcardsPage({ lessonInput, lessonResult }: { lessonInput: string; lessonResult: LessonResult | null }) {
@@ -967,7 +972,7 @@ function CommunicatePage() {
   const [copied, setCopied] = useState(false);
   const selected = choices.find((item) => item.label === choice) || choices[0];
   const message = tone === "Short" ? selected.short : tone === "Formal" ? selected.formal : selected.clear;
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> HELP ME COMMUNICATE</span><h2>Find the words for what you need.</h2><p>Choose what fits right now. Adapt will help you create a respectful message for a teacher.</p></section><section className="communication-grid"><div className="choice-list">{choices.map((item) => <button className={choice === item.label ? "active" : ""} onClick={() => setChoice(item.label)} key={item.label}><span>{item.icon}</span>{item.label}<i>→</i></button>)}</div><article className="message-card"><span className="eyebrow"><i /> SUGGESTED MESSAGE</span><h3>{choice}</h3><blockquote>“{message}”</blockquote><div className="tone-row">{["Short", "Clear", "Formal"].map((t) => <button className={tone === t ? "active" : ""} onClick={() => setTone(t as "Short" | "Clear" | "Formal")} key={t}>{t === "Short" ? "Make shorter" : t === "Formal" ? "Make more formal" : "Make simpler"}</button>)}</div><button className="button primary" onClick={async () => { await navigator.clipboard?.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied ✓" : "Copy message"}</button></article></section></div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> HELP ME COMMUNICATE</span><h2>Find the words for what you need.</h2><p>Choose what fits right now. Padhai Yatra will help you create a respectful message for a teacher.</p></section><section className="communication-grid"><div className="choice-list">{choices.map((item) => <button className={choice === item.label ? "active" : ""} onClick={() => setChoice(item.label)} key={item.label}><span>{item.icon}</span>{item.label}<i>→</i></button>)}</div><article className="message-card"><span className="eyebrow"><i /> SUGGESTED MESSAGE</span><h3>{choice}</h3><blockquote>“{message}”</blockquote><div className="tone-row">{["Short", "Clear", "Formal"].map((t) => <button className={tone === t ? "active" : ""} onClick={() => setTone(t as "Short" | "Clear" | "Formal")} key={t}>{t === "Short" ? "Make shorter" : t === "Formal" ? "Make more formal" : "Make simpler"}</button>)}</div><button className="button primary" onClick={async () => { await navigator.clipboard?.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied ✓" : "Copy message"}</button></article></section></div>;
 }
 
 function formatDuration(seconds: number) {
@@ -1033,7 +1038,7 @@ function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string
   }, []);
 
   function handleMaterial(subject: string, title: string) {
-    setLessonInput(`Use the ${subject} textbook (${title}) as the reference. Paste a topic, paragraph, or homework question from this book and AdaptEd will answer from the book first.`);
+    setLessonInput(`Use the ${subject} textbook (${title}) as the reference. Paste a topic, paragraph, or homework question from this book and Padhai Yatra will answer from the book first.`);
     setView("learn");
   }
 
@@ -1094,13 +1099,13 @@ function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string
     <div className="page-content work-page">
       <section className="page-intro">
         <span className="eyebrow"><i /> MY BOOKS</span>
-        <h2>Textbooks connected to AdaptEd.</h2>
+        <h2>Textbooks connected to Padhai Yatra.</h2>
         <p>Upload a PDF to index it, open a source, or jump straight into a textbook-backed explanation.</p>
       </section>
 
       <section className="safety-card books-safety">
         <b>Book-first answering</b>
-        <p>AdaptEd searches your textbook first. If a page match is found, the answer will say which book and pages were used. If not, it will clearly label the answer as general AI help.</p>
+        <p>Padhai Yatra searches your textbook first. If a page match is found, the answer will say which book and pages were used. If not, it will clearly label the answer as general AI help.</p>
       </section>
 
       <section className="resource-grid">
@@ -1115,7 +1120,7 @@ function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string
               </div>
               <div className="resource-actions">
                 {book.canOpen && openHref ? <a className="button" href={openHref} target="_blank" rel="noreferrer">Open Book</a> : <button className="button" disabled>Not indexed</button>}
-                <button className="button primary" onClick={() => handleMaterial(book.subject, book.title)}>Use in AdaptEd</button>
+                <button className="button primary" onClick={() => handleMaterial(book.subject, book.title)}>Use in Padhai Yatra</button>
                 <label className={`button book-upload ${busySubject === book.subject ? "disabled" : ""}`}>
                   {busySubject === book.subject ? "Working…" : book.status === "Indexed" ? "Replace PDF" : "Add PDF"}
                   <input
@@ -1134,7 +1139,7 @@ function ResourcesPage({ setLessonInput, setView }: { setLessonInput: (v: string
 
       <div className="safety-card">
         <b>{message}</b>
-        <p>Students can open books, upload PDFs, or paste a question from the book into AdaptEd. The app will try textbook pages first before falling back to general AI help.</p>
+        <p>Students can open books, upload PDFs, or paste a question from the book into Padhai Yatra. The app will try textbook pages first before falling back to general AI help.</p>
       </div>
     </div>
   );
@@ -1184,11 +1189,11 @@ function ProfilePage({ preferences, quizAttempts, studySessions, setView, openHi
 }
 
 function AdaptHelper({ open, setOpen, setView }: { open: boolean; setOpen: (v: boolean) => void; setView: (v: View) => void }) {
-  return <div className={`adapt-helper ${open ? "open" : ""}`}><button className="adapt-launcher" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? "Close Adapt helper" : "Open Adapt helper"}><span>✦</span><b>{open ? "Close" : "Ask Adapt"}</b></button>{open && <aside className="adapt-popover" aria-label="Adapt learning helper"><div className="adapt-helper-head"><div className="adapt-face">A</div><div><b>Hi, I&apos;m Adapt.</b><small>What would help right now?</small></div></div><div className="helper-actions"><button onClick={() => { setView("learn"); setOpen(false); }}>✦ Explain something</button><button onClick={() => { setView("assignments"); setOpen(false); }}>☑ Make work smaller</button><button onClick={() => { setView("communicate"); setOpen(false); }}>◌ Help me ask for help</button><button onClick={() => { setView("focus"); setOpen(false); }}>◎ Help me focus</button></div><p>Adapt supports learning. It does not diagnose or judge students.</p></aside>}</div>;
+  return <div className={`adapt-helper ${open ? "open" : ""}`}><button className="adapt-launcher" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? "Close Padhai Yatra helper" : "Open Padhai Yatra helper"}><span>✦</span><b>{open ? "Close" : "Ask Padhai"}</b></button>{open && <aside className="adapt-popover" aria-label="Padhai Yatra learning helper"><div className="adapt-helper-head"><div className="adapt-face">A</div><div><b>Hi, I&apos;m Padhai Yatra.</b><small>What would help right now?</small></div></div><div className="helper-actions"><button onClick={() => { setView("learn"); setOpen(false); }}>✦ Explain something</button><button onClick={() => { setView("assignments"); setOpen(false); }}>☑ Make work smaller</button><button onClick={() => { setView("communicate"); setOpen(false); }}>◌ Help me ask for help</button><button onClick={() => { setView("focus"); setOpen(false); }}>◎ Help me focus</button></div><p>Padhai Yatra supports learning. It does not diagnose or judge students.</p></aside>}</div>;
 }
 
 function SettingsPage({ theme, toggleTheme, calm, setCalm, aiMode }: { theme: string; toggleTheme: () => void; calm: boolean; setCalm: (v: boolean) => void; aiMode: "checking" | "live" | "demo" }) {
-  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> SETTINGS</span><h2>Make AdaptEd comfortable for you.</h2></section><section className="settings-card"><div><span><b>Appearance</b><small>Current: {theme} mode</small></span><button className="button" onClick={toggleTheme}>Use {theme === "light" ? "dark" : "light"} mode</button></div><div><span><b>Calm Mode</b><small>Reduce motion, navigation, and secondary details.</small></span><label className="calm-toggle"><input type="checkbox" checked={calm} onChange={(e) => setCalm(e.target.checked)} /><span className="switch" /></label></div><div><span><b>AI mode</b><small>{aiMode === "live" ? "Secure server-side OpenAI responses are active." : "Competition-safe demo responses are active until an API key is configured."}</small></span><span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "live" ? "Live AI active" : "Demo AI ready"}</span></div><div><span><b>Data</b><small>Learning preferences are stored only in this browser.</small></span><button className="button" onClick={() => { localStorage.removeItem("adapted-preferences"); window.location.reload(); }}>Reset local data</button></div></section><div className="safety-card"><b>Educational personalization, not diagnosis</b><p>AdaptEd never diagnoses autism, ADHD, dyslexia, learning disabilities, or medical conditions. Quiz results are learning-progress indicators only.</p></div></div>;
+  return <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> SETTINGS</span><h2>Make Padhai Yatra comfortable for you.</h2></section><section className="settings-card"><div><span><b>Appearance</b><small>Current: {theme} mode</small></span><button className="button" onClick={toggleTheme}>Use {theme === "light" ? "dark" : "light"} mode</button></div><div><span><b>Calm Mode</b><small>Reduce motion, navigation, and secondary details.</small></span><label className="calm-toggle"><input type="checkbox" checked={calm} onChange={(e) => setCalm(e.target.checked)} /><span className="switch" /></label></div><div><span><b>AI mode</b><small>{aiMode === "live" ? "Secure server-side OpenAI responses are active." : "Competition-safe demo responses are active until an API key is configured."}</small></span><span className={`demo-badge ${aiMode === "live" ? "live" : ""}`}><i /> {aiMode === "live" ? "Live AI active" : "Demo AI ready"}</span></div><div><span><b>Data</b><small>Learning preferences are stored only in this browser.</small></span><button className="button" onClick={() => { localStorage.removeItem("adapted-preferences"); window.location.reload(); }}>Reset local data</button></div></section><div className="safety-card"><b>Educational personalization, not diagnosis</b><p>Padhai Yatra never diagnoses autism, ADHD, dyslexia, learning disabilities, or medical conditions. Quiz results are learning-progress indicators only.</p></div></div>;
 }
 
 export default function Home() {
@@ -1236,7 +1241,7 @@ export default function Home() {
     localStorage.setItem(QUIZ_ATTEMPTS_KEY, JSON.stringify(quizAttempts));
   }, [quizAttempts]);
 
-  const title = useMemo(() => navItems.find((n) => n.id === view)?.label || (view === "settings" ? "Settings" : view === "profile" ? "My profile" : "AdaptEd"), [view]);
+  const title = useMemo(() => navItems.find((n) => n.id === view)?.label || (view === "settings" ? "Settings" : view === "profile" ? "My profile" : "Padhai Yatra"), [view]);
   const toggleTheme = () => setTheme((t) => t === "light" ? "dark" : "light");
   const recordStudySession = useCallback((session: StudySession) => {
     setStudySessions((current) => current.some((item) => item.id === session.id) ? current : [session, ...current].slice(0, 100));
@@ -1246,7 +1251,7 @@ export default function Home() {
   }, []);
   function login() { setScreen("app"); setView("dashboard"); }
   function quickDemo() { login(); }
-  async function runAdapt(action: string) {
+  async function runLearningAction(action: string) {
     const normalizedLesson = lessonInput.trim();
     if (!normalizedLesson) return;
     setLoading(true); setStage(0); setShowQuiz(false); setView("learn");
@@ -1258,7 +1263,7 @@ export default function Home() {
         setLessonResult(buildResultFromAnalysis(cachedAnalysis, action));
       } else {
         const response = await fetch("/api/adapt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, content: normalizedLesson, preferences }) });
-        if (!response.ok) throw new Error("Adaptation failed");
+        if (!response.ok) throw new Error("Learning request failed");
         const data = await response.json() as AdaptResponse;
         setLessonResult(data.result);
         if (data.analysis) {
@@ -1279,7 +1284,7 @@ export default function Home() {
       });
     } finally { window.clearInterval(stages); setStage(2); setLoading(false); }
   }
-  const dashboardAdapt = () => runAdapt("Simplify");
+  const dashboardLearningAction = () => runLearningAction("Simplify");
 
   if (screen === "landing") return <Landing onStart={() => setScreen("login")} onDemo={quickDemo} theme={theme} toggleTheme={toggleTheme} />;
   if (screen === "login") return <Login onLogin={login} onBack={() => setScreen("landing")} />;
@@ -1290,10 +1295,10 @@ export default function Home() {
       {menuOpen && <button className="nav-overlay" onClick={() => setMenuOpen(false)} aria-label="Close navigation overlay" />}
       <div className="app-main">
         <Header title={title} calm={calm} setCalm={setCalm} theme={theme} toggleTheme={toggleTheme} onMenu={() => setMenuOpen(true)} aiMode={aiMode} onProfile={() => setView("profile")} />
-        {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardAdapt} lessonResult={lessonResult} />}
-        {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} lessonAnalysis={lessonAnalysis} loading={loading} stage={stage} runAction={runAdapt} showQuiz={showQuiz} setShowQuiz={setShowQuiz} onQuizComplete={recordQuizAttempt} />}
+        {view === "dashboard" && <Dashboard setView={setView} lessonInput={lessonInput} setLessonInput={setLessonInput} adapt={dashboardLearningAction} lessonResult={lessonResult} />}
+        {view === "learn" && <LearnPage lessonInput={lessonInput} setLessonInput={setLessonInput} result={lessonResult} lessonAnalysis={lessonAnalysis} loading={loading} stage={stage} runAction={runLearningAction} showQuiz={showQuiz} setShowQuiz={setShowQuiz} onQuizComplete={recordQuizAttempt} />}
         {view === "assignments" && <AssignmentsPage calm={calm} />}
-        {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runAdapt("Explain deeply")} onComplete={recordQuizAttempt} /></div>}
+        {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runLearningAction("Explain deeply")} onComplete={recordQuizAttempt} /></div>}
         {view === "planner" && <PlannerPage />}
         {view === "flashcards" && <FlashcardsPage lessonInput={lessonInput} lessonResult={lessonResult} />}
         {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} onSessionComplete={recordStudySession} />}

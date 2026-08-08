@@ -13,13 +13,13 @@ async function render(path = "/") {
   );
 }
 
-test("renders the AdaptEd AI application shell", async () => {
+test("renders the Padhai Yatra application shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /AdaptEd AI/);
-  assert.match(html, /Learning that adapts to you|One lesson/);
+  assert.match(html, /Padhai Yatra/);
+  assert.match(html, /Learn anytime, anywhere/i);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 

@@ -13,21 +13,21 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
   return {
     metadataBase: new URL(origin),
-    title: "AdaptEd AI — Learning that adapts to you",
-    description: "A personalized learning companion that adapts lessons, assignments, quizzes, and study plans to the way each student learns best.",
-    applicationName: "AdaptEd AI",
+    title: "Padhai Yatra — Learn Anytime, Anywhere",
+    description: "A Grade 11 learning companion for topic explanations, quizzes, study planning, focus tracking, textbooks, and video help.",
+    applicationName: "Padhai Yatra",
     keywords: ["personalized learning", "education", "study planner", "accessible learning", "AI learning companion"],
     openGraph: {
-      title: "AdaptEd AI — One lesson. Different ways to learn.",
-      description: "Personalized lessons, manageable assignments, calm focus, and study tools designed around the learner.",
+      title: "Padhai Yatra — Learn Anytime, Anywhere",
+      description: "Grade 11 topic explanations, quizzes, study plans, focus tools, textbooks, and video help in one friendly learning space.",
       type: "website",
-      images: [{ url: `${origin}/og.png`, width: 1536, height: 906, alt: "AdaptEd AI — One lesson. Different ways to learn." }],
+      images: [{ url: `${origin}/padhai-yatra-logo.png`, width: 561, height: 566, alt: "Padhai Yatra logo" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "AdaptEd AI — One lesson. Different ways to learn.",
-      description: "A calm, personalized AI learning companion for every student.",
-      images: [`${origin}/og.png`],
+      title: "Padhai Yatra — Learn Anytime, Anywhere",
+      description: "A calm Grade 11 learning companion for explanations, quizzes, planning, and video help.",
+      images: [`${origin}/padhai-yatra-logo.png`],
     },
   };
 }

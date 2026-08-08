@@ -1,8 +1,8 @@
-# AdaptEd AI
+# Mero Basket — Padhai Yatra
 
-> One lesson. Different ways to learn.
+> Learn Anytime, Anywhere.
 
-AdaptEd AI is a personalized learning companion that adapts lessons, assignments, quizzes, study plans, and focus tools to each student’s selected learning preferences. It is an educational accessibility tool for all students and does not provide medical or diagnostic assessments.
+Mero Basket is the hackathon project repository for Padhai Yatra, a Grade 11 learning companion that explains topics, builds quizzes, finds videos, plans study time, and adapts support to each student’s selected learning preferences. It is an educational accessibility tool for all students and does not provide medical or diagnostic assessments.
 
 ## Hackathon team
 
@@ -57,4 +57,4 @@ Start with [`frontend/AdaptEdApp.tsx`](frontend/AdaptEdApp.tsx) for the product 
 
 ## Safety
 
-AdaptEd AI never diagnoses autism, ADHD, dyslexia, learning disabilities, or medical conditions. Quiz scores are learning-progress indicators only.
+Padhai Yatra never diagnoses autism, ADHD, dyslexia, learning disabilities, or medical conditions. Quiz scores are learning-progress indicators only.
