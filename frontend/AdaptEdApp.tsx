@@ -1192,11 +1192,9 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
       setInviteStatus("Enter a valid friend email first.");
       return;
     }
-    const subject = encodeURIComponent(`Join my Padhai Yatra ${roomMode.toLowerCase()} room`);
-    const body = encodeURIComponent(`Hi! Join my Padhai Yatra ${roomMode.toLowerCase()} room.\n\nTopic: ${topic}\nRoom code: ${roomCode}\nInvite link: ${inviteLink}\n\nWe can study together and take the same quiz.`);
-    window.location.href = `mailto:${clean}?subject=${subject}&body=${body}`;
     setFriends((current) => current.includes(clean) ? current : [clean, ...current].slice(0, 12));
     setMessages((current) => [{ from: currentUser.name, text: `Invited ${clean} to ${roomMode.toLowerCase()} room "${topic}".`, time: new Date().toISOString() }, ...current].slice(0, 20));
+    setInviteStatus(`Sending invite to ${clean}…`);
     if (supabase) {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
@@ -1211,7 +1209,13 @@ function StudyTogetherPage({ currentUser, setView, setLessonInput }: { currentUs
         }
       }
     }
-    setInviteStatus(`Email draft opened for ${clean}. Press Send in your mail app.${supabase ? " Invite also saved to Supabase." : ""}`);
+    const response = await fetch("/api/study-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: clean, topic, roomCode, roomMode, inviteLink, inviterName: currentUser.name }),
+    });
+    const data = await response.json().catch(() => ({ ok: false, error: "Invite failed." })) as { ok?: boolean; message?: string; error?: string };
+    setInviteStatus(data.ok ? data.message || `Invite sent to ${clean}.` : data.error || "Invite could not be sent yet.");
     setFriendEmail("");
   };
   const send = () => {

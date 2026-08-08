@@ -27,6 +27,7 @@ Padhai Yatra can use Supabase Auth for real email verification links and Supabas
 2. In Supabase, open Project Settings → API and copy:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
    - Publishable key → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - Secret key → `SUPABASE_SECRET_KEY` for server-side invite sending
 3. Put those values in `.env.local`.
 4. In Supabase SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql).
 5. In Authentication → URL Configuration, add your local URL while testing:
