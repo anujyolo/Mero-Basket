@@ -1325,37 +1325,34 @@ function FlashcardsPage({ lessonInput, lessonResult }: { lessonInput: string; le
   return <div className="page-content center-page"><section className="page-intro"><span className="eyebrow"><i /> FLASHCARDS</span><h2>{topic} essentials</h2><p>Card {index + 1} of {cards.length} · {review.length} marked for review</p></section><button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label="Flip flashcard"><span>{flipped ? "ANSWER" : "QUESTION"}</span><h2>{flipped ? card.back : card.front}</h2><small>Click to {flipped ? "see question" : "flip"}</small></button><div className="flash-actions"><button className="button" onClick={() => go(index - 1)}>Previous</button><button className="button" onClick={() => setReview((r) => r.includes(index) ? r : [...r, index])}>Review again</button><button className="button primary" onClick={() => go(index + 1)}>Know it · Next</button></div></div>;
 }
 
-function FocusPage({ lessonInput, lessonResult, focusState, setFocusState, onSessionComplete }: { lessonInput: string; lessonResult: LessonResult | null; focusState: FocusState; setFocusState: (value: FocusState | ((current: FocusState) => FocusState)) => void; onSessionComplete: (session: StudySession) => void }) {
+// Follows the student around the app once a session is under way, so leaving the Focus
+// page does not mean losing sight of the timer. Tapping it goes back to the full view.
+function FocusMiniTimer({ focusState, onOpen }: { focusState: FocusState; onOpen: () => void }) {
+  const display = `${String(Math.floor(focusState.seconds / 60)).padStart(2, "0")}:${String(focusState.seconds % 60).padStart(2, "0")}`;
+  const remaining = focusState.seconds / (focusState.duration * 60 || 1);
+  const isBreak = focusState.mode === "break";
+  return (
+    <button
+      type="button"
+      className={`focus-mini ${focusState.running ? "running" : "paused"}`}
+      onClick={onOpen}
+      aria-label={`${isBreak ? "Break" : "Focus"} timer, ${display} remaining${focusState.running ? "" : ", paused"}. Open the focus page.`}
+    >
+      <span className="focus-mini-ring" style={{ "--mini-progress": `${remaining * 360}deg` } as React.CSSProperties}>
+        <i>{isBreak ? "☕" : "◎"}</i>
+      </span>
+      <span className="focus-mini-body">
+        <b>{display}</b>
+        <small>{isBreak ? "Break" : "Focus"}{focusState.running ? "" : " · paused"}</small>
+      </span>
+    </button>
+  );
+}
+
+// The countdown itself runs in AdaptEdApp, not here: this page unmounts whenever the
+// student navigates away, and an interval owned by it would be torn down mid-session.
+function FocusPage({ lessonInput, lessonResult, focusState, setFocusState, motivation }: { lessonInput: string; lessonResult: LessonResult | null; focusState: FocusState; setFocusState: (value: FocusState | ((current: FocusState) => FocusState)) => void; motivation: string }) {
   const topic = getLessonTopic(lessonInput, lessonResult);
-  const [motivation, setMotivation] = useState("");
-  useEffect(() => {
-    if (!focusState.running || focusState.seconds <= 0) return;
-    const timer = window.setInterval(() => {
-      setFocusState((current) => {
-        if (!current.running || current.seconds <= 1) {
-          // Chime and a line of encouragement the moment the timer lands on zero.
-          playFocusChime();
-          setMotivation(focusMotivations[Math.floor(Math.random() * focusMotivations.length)]);
-          if (current.mode === "focus") {
-            const endedAt = new Date();
-            const durationSeconds = current.duration * 60;
-            onSessionComplete({
-              id: `${endedAt.toISOString()}-${topic}`,
-              subject: topic.split(/\s+/)[0] || "Study",
-              topic,
-              date: endedAt.toISOString().slice(0, 10),
-              startedAt: new Date(endedAt.getTime() - durationSeconds * 1000).toISOString(),
-              endedAt: endedAt.toISOString(),
-              durationSeconds,
-            });
-          }
-          return { ...current, seconds: 0, running: false };
-        }
-        return { ...current, seconds: current.seconds - 1 };
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [focusState.running, focusState.seconds, onSessionComplete, setFocusState, topic]);
   function select(n: number) { setFocusState({ mode: "focus", duration: n, seconds: n * 60, running: false, savedFocusDuration: undefined, savedFocusSeconds: undefined }); }
   const display = `${String(Math.floor(focusState.seconds / 60)).padStart(2, "0")}:${String(focusState.seconds % 60).padStart(2, "0")}`;
   const label = focusState.mode === "break" ? "BREAK" : "CURRENT TASK";
@@ -1851,6 +1848,9 @@ export default function Home() {
   const [analysisCache, setAnalysisCache] = useState<Record<string, LessonAnalysis>>(() => readStoredJson(ANALYSIS_CACHE_KEY, {}));
   const [focusState, setFocusState] = useState<FocusState>(() => readStoredJson("adapted-focus-state", { mode: "focus", duration: 15, seconds: 15 * 60, running: false }));
   const [studySessions, setStudySessions] = useState<StudySession[]>(() => readStoredJson(STUDY_SESSIONS_KEY, []));
+  // Derived rather than stored: rotating on completed-session count gives a fresh line
+  // each time without needing a setState inside the completion effect.
+  const focusMotivation = focusMotivations[studySessions.length % focusMotivations.length];
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(() => readStoredJson(QUIZ_ATTEMPTS_KEY, []));
   const [authError, setAuthError] = useState("");
   const [invitedRoom, setInvitedRoom] = useState<{ room: string; topic: string; mode: "Study" | "Competition" } | null>(null);
@@ -1934,6 +1934,47 @@ export default function Home() {
   const recordQuizAttempt = useCallback((attempt: QuizAttempt) => {
     setQuizAttempts((current) => current.some((item) => item.id === attempt.id) ? current : [attempt, ...current].slice(0, 100));
   }, []);
+
+  // Focus countdown lives at app level so a running session survives navigation — an
+  // interval owned by FocusPage would be cleared the moment the student browsed away.
+  useEffect(() => {
+    if (!focusState.running) return;
+    const timer = window.setInterval(() => {
+      setFocusState((current) => {
+        if (!current.running || current.seconds <= 0) return current;
+        const seconds = current.seconds - 1;
+        return { ...current, seconds, running: seconds > 0 };
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [focusState.running]);
+
+  // Fires when the countdown lands on zero. Side effects only — no setState — so the
+  // effect never triggers a cascading render. The ref keeps it to once per session.
+  const focusCompletedRef = useRef(false);
+  useEffect(() => {
+    if (focusState.seconds > 0) { focusCompletedRef.current = false; return; }
+    if (focusCompletedRef.current) return;
+    focusCompletedRef.current = true;
+    playFocusChime();
+    if (focusState.mode !== "focus") return;
+    const topic = getLessonTopic(lessonInput, lessonResult);
+    const endedAt = new Date();
+    const durationSeconds = focusState.duration * 60;
+    // A finished session has to be recorded the moment the timer expires; there is no
+    // render-time equivalent, so this state update genuinely belongs in the effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    recordStudySession({
+      id: `${endedAt.toISOString()}-${topic}`,
+      subject: topic.split(/\s+/)[0] || "Study",
+      topic,
+      date: endedAt.toISOString().slice(0, 10),
+      startedAt: new Date(endedAt.getTime() - durationSeconds * 1000).toISOString(),
+      endedAt: endedAt.toISOString(),
+      durationSeconds,
+    });
+  }, [focusState.seconds, focusState.mode, focusState.duration, lessonInput, lessonResult, recordStudySession]);
+
   function quickDemo() { login({ name: "Anuj Adhikari", email: "demo@student.com", password: "demo123", createdAt: new Date().toISOString() }); }
   async function runLearningAction(action: string) {
     const normalizedLesson = lessonInput.trim();
@@ -1985,7 +2026,7 @@ export default function Home() {
         {view === "quiz" && <div className="page-content work-page"><section className="page-intro"><span className="eyebrow"><i /> KNOWLEDGE CHECK</span><h2>Quick quiz</h2><p>A low-pressure check to see what is strong and what to review.</p></section><QuizCard lessonInput={lessonInput} lessonResult={lessonResult} lessonAnalysis={lessonAnalysis} onReview={() => runLearningAction("Explain deeply")} onComplete={recordQuizAttempt} /></div>}
         {view === "planner" && <PlannerPage />}
         {view === "flashcards" && <FlashcardsPage lessonInput={lessonInput} lessonResult={lessonResult} />}
-        {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} onSessionComplete={recordStudySession} />}
+        {view === "focus" && <FocusPage lessonInput={lessonInput} lessonResult={lessonResult} focusState={focusState} setFocusState={setFocusState} motivation={focusMotivation} />}
         {view === "routine" && <RoutinePage />}
         {view === "communicate" && <CommunicatePage />}
         {view === "studyroom" && <StudyTogetherPage currentUser={currentUser} setView={setView} setLessonInput={setLessonInput} />}
@@ -1995,6 +2036,7 @@ export default function Home() {
         {view === "profile" && <ProfilePage currentUser={currentUser} preferences={preferences} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} openHistory={() => setHistoryOpen(true)} />}
         {view === "settings" && <SettingsPage theme={theme} toggleTheme={toggleTheme} calm={calm} setCalm={setCalm} aiMode={aiMode} />}
       </div>
+      {view !== "focus" && (focusState.running || (focusState.seconds > 0 && focusState.seconds < focusState.duration * 60)) && <FocusMiniTimer focusState={focusState} onOpen={() => setView("focus")} />}
       <AdaptHelper open={helperOpen} setOpen={setHelperOpen} setView={setView} />
       <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} quizAttempts={quizAttempts} studySessions={studySessions} setView={setView} currentUser={currentUser} />
     </div>

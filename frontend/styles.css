@@ -411,6 +411,23 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .timer-ring > div { position: relative; z-index: 1; display: grid; }
 .timer-ring strong { font-family: var(--font-geist-mono); font-size: 51px; letter-spacing: -.05em; }
 .timer-ring small { color: var(--muted); }
+/* Floating session timer. Sits bottom-left; .adapt-helper owns bottom-right. */
+/* Clears the sidebar column, which owns the bottom-left corner with the profile card. */
+.focus-mini { position: fixed; left: calc(248px + 24px); bottom: 22px; z-index: 60; display: flex; align-items: center; gap: 11px; padding: 8px 18px 8px 8px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); box-shadow: 0 12px 35px rgba(13,28,20,.25); cursor: pointer; text-align: left; }
+@media (max-width: 1050px) { .focus-mini { left: calc(210px + 24px); } }
+@media (max-width: 760px) { .focus-mini { left: 24px; } }
+.focus-mini:hover { border-color: var(--accent); }
+.focus-mini-ring { --mini-progress: 360deg; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent) var(--mini-progress), var(--surface-2) 0); position: relative; flex-shrink: 0; }
+.focus-mini-ring::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--surface); }
+.focus-mini-ring i { position: relative; z-index: 1; font-style: normal; font-size: 13px; color: var(--accent); }
+.focus-mini-body { display: grid; min-width: 0; }
+.focus-mini b { font-family: var(--font-geist-mono); font-size: 15px; letter-spacing: -.02em; }
+.focus-mini small { color: var(--subtle); font-size: 10px; }
+.focus-mini.running .focus-mini-ring i { animation: focus-mini-pulse 2s ease-in-out infinite; }
+.focus-mini.paused { opacity: .78; }
+@keyframes focus-mini-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.calm .focus-mini.running .focus-mini-ring i { animation: none; }
+
 .duration-row, .focus-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
 .focus-actions { margin-top: 20px; }
 .gentle-message { background: var(--accent-2); color: var(--accent-dark); padding: 13px; border-radius: 11px; }

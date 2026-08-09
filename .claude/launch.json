@@ -5,7 +5,8 @@
       "name": "padhai-yatra",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 3002
+      "port": 3002,
+      "autoPort": false
     }
   ]
 }
